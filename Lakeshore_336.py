@@ -7,9 +7,9 @@ from typing_extensions import deprecated
 
 from qcodes import validators as vals
 from qcodes.parameters import Group, GroupParameter
+from qcodes.instrument import InstrumentBaseKWArgs
 from qcodes.instrument import (
     ChannelList,
-    InstrumentBaseKWArgs,
     InstrumentChannel,
     VisaInstrument,
     VisaInstrumentKWArgs,
