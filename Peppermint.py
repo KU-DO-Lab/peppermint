@@ -133,7 +133,7 @@ class Peppermint(App):
             #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
             # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-            new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+            new_instrument = auto_connect_instrument(name="", address=instrument_address)
             
             # Create a new list with the additional instrument
             new_connected = self.connected_instruments.copy()
