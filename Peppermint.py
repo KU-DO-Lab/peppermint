@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select
+from textual.widgets import DataTable, Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select
 
 class Peppermint(App):
     """A Textual app to manage instruments."""
@@ -53,14 +53,20 @@ class Peppermint(App):
                 instrument_options: list[tuple[str, str]] = [(element.name, element.name) for element in self.connected_instruments]
                 self.parameters_connected_instrument_list = Select[str](options=instrument_options)
                 self.available_parameters: OptionList = OptionList()
+                self.followed_parameters: DataTable = DataTable()
+                self.set_parameters: DataTable = DataTable()
                 yield Horizontal(
                     # I am very bad at CSS, this needs changed to use it lmao -Grant
-                    Horizontal(),  # Left spacer
+                    Vertical(
+                        Label("Followed Parameters"), self.followed_parameters
+                    ),
                     Vertical(
                         Label("Connected Instruments"), self.parameters_connected_instrument_list,
                         Label("Available Parameters"), self.available_parameters
                     ),
-                    Horizontal()   # Right spacer
+                    Vertical(
+                        Label("Set Parameters"), self.set_parameters
+                    ),
                 )
             with TabPane("Temperature", id="temperature_tab"):
                 yield Label()
