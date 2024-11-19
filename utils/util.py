@@ -1,7 +1,10 @@
 import pyvisa
+from qcodes.instrument import VisaInstrument
 from textual.widgets import OptionList, Select
 from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
+from textual.reactive import reactive
+from typing import Optional
 
 def update_option_list(option_list: OptionList, items: list):
     """Helper method to update an OptionList's contents."""
@@ -14,6 +17,18 @@ def update_select(select_list: Select, items: list):
     select_list.set_options(
         [(element, element) for element in items]
     )
+
+def match_instrument_name_to_object(name: str, instrument_list) -> Optional[VisaInstrument]:
+    """
+    Fields on screen have to be rendered using the instrument's name field, since we can't just write an instrument 
+    object to the widget, that doesn't make sense. We still pull these names from a single list of instruments, so 
+    if we, say, select a name of an instrument in one widget and want to use the result of that to render the parameters
+    of that instrument, we will need to match the name of the instrument to the instrument object.
+    """
+    try:
+        return next(inst for inst in instrument_list if inst.name == name)
+    except StopIteration:
+        return None
 
 # This and connect instrument should be renamed to something a bit clearer.
 def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
@@ -40,8 +55,7 @@ def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
         inst.close()
         raise(f"Error querying IDN : {e}")
     
-    # TODO: prompt for name, kwargs
-    # See connect_device() from Spearmint.
+    # Reference connect_device() from Spearmint for a superior function.
     match IDN.split(',')[1]:
         case "MODEL 2450":
             new_dev = Keithley2450("k2450", address, *args, **kwargs)
@@ -53,14 +67,16 @@ def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
             ...
     return new_dev
 
-def list_avail_instrument_params(instrument):
+def get_avail_instrument_params(instrument: VisaInstrument) -> list[str]:
+    """
+    Returns a list of available parameters directly, given an instrument.
+    """
+    return [p.full_name for key, p in instrument.parameters.items()]
+
+def list_avail_instrument_params(instrument: VisaInstrument) -> None:
     """
     Lists available parameters for the instrument passed.
     """
-    # if len(instruments) > 0:
-    #     instrument = instruments[index] # we will need to wrap this in smth to dynamically set the instrument when we are editing params;
-    #                                     # i.e. we will have a menu to edit params, then list instruments. Tab/Shift+Tab changes instrument,
-    #                                     # left/right sets the param to follow/set
     for key, p in instrument.parameters.items():
         print(p.full_name)
     for name, submodule in instrument.submodules.items():

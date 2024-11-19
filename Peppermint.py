@@ -15,8 +15,8 @@ class Peppermint(App):
     # Not implemented yet, but we will want to have different bindings for each page.
     BINDINGS = []
     TMP_BINDINGS = []
+    PARAMETERS_TAB_BINDINGS = []
     INSTRUMENTS_TAB_BINDINGS = [
-        Binding("c", "connect_selected", "Connect Instrument", show=True),
         Binding("m", "manual_connect", "Connect an Instrument Manually", show=True),
     ]
     
@@ -43,16 +43,18 @@ class Peppermint(App):
         
         with TabbedContent():
             with TabPane("Instruments", id="instruments_tab"):
-                self.detected_instrument_list = OptionList(*self.detected_instruments)
-                self.connected_instrument_list = OptionList()  # Start empty
+                self.detected_instrument_list: OptionList = OptionList(*self.detected_instruments)
+                self.connected_instrument_list: OptionList = OptionList()  # Start empty
                 yield Horizontal(
                     Vertical(Label("Detected Instruments"), self.detected_instrument_list),
                     Vertical(Label("Connected Instruments"), self.connected_instrument_list),
                 )
             with TabPane("Parameters", id="parameters_tab"):
-                self.parameters_connected_instrument_list = Select([(element.name, element.name) for element in self.connected_instruments])
-                self.available_parameters = OptionList()
+                instrument_options: list[tuple[str, str]] = [(element.name, element.name) for element in self.connected_instruments]
+                self.parameters_connected_instrument_list = Select[str](options=instrument_options)
+                self.available_parameters: OptionList = OptionList()
                 yield Horizontal(
+                    # I am very bad at CSS, this needs changed to use it lmao -Grant
                     Horizontal(),  # Left spacer
                     Vertical(
                         Label("Connected Instruments"), self.parameters_connected_instrument_list,
@@ -97,7 +99,18 @@ class Peppermint(App):
     @on(Select.Changed)
     def handle_parameter_instrument_changed(self, event: Select.Changed) -> None:
         """Fetch the new parameters for an instrument when that instrument is changed."""
-        ...
+        selected_instrument: Optional[VisaInstrument] = next(
+            (inst for inst in self.connected_instruments if inst.name == self.parameters_connected_instrument_list.value),
+            None  # If for whatever reason an instrument can't be found this is set to none
+        )
+
+        if selected_instrument is None:
+            # self.notify("No instrument selected")
+            return
+
+        available_parameters = get_avail_instrument_params(selected_instrument)
+
+        
     
     def connect_instrument(self, instrument_address: str) -> bool:
         """
@@ -105,9 +118,10 @@ class Peppermint(App):
         Returns True if connection was successful.
         """
         try:
-            # Do the connection procses here- right now it just tries the auto-connect, but we will later handle
-            # manual connection here.
-            new_instrument = auto_connect_instrument(name="", address=instrument_address)
+            # TODO: need to prompt for an instrument name here
+            #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
+            # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
+            new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
             
             # Create a new list with the additional instrument
             new_connected = self.connected_instruments.copy()
