@@ -21,7 +21,7 @@ class Peppermint(App):
     
     # Lists for the instruments are reactive, since they can change
     detected_instruments = reactive(list)
-    connected_instruments = reactive(list)
+    connected_instruments = reactive(list) # This is going to be a list of instrument objects, so we will have to think of a good way to manage display data for it.
 
     def __init__(self):
         super().__init__()
@@ -106,11 +106,11 @@ class Peppermint(App):
         try:
             # Do the connection procses here- right now it just tries the auto-connect, but we will later handle
             # manual connection here.
-            auto_connect_instrument(instrument_address)
+            new_instrument = auto_connect_instrument(name="", address=instrument_address)
             
             # Create a new list with the additional instrument
             new_connected = self.connected_instruments.copy()
-            new_connected.append(instrument_address)
+            new_connected.append(new_instrument)
             self.connected_instruments = new_connected  # Trigger reactive update
             update_select(self.parameters_connected_instrument_list, new_connected)
             

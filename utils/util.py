@@ -1,5 +1,7 @@
 import pyvisa
 from textual.widgets import OptionList, Select
+from utils.drivers.Lakeshore_336 import LakeshoreModel336
+from utils.drivers.Keithley_2450 import Keithley2450
 
 def update_option_list(option_list: OptionList, items: list):
     """Helper method to update an OptionList's contents."""
@@ -14,26 +16,37 @@ def update_select(select_list: Select, items: list):
     )
 
 # This and connect instrument should be renamed to something a bit clearer.
-def auto_connect_instrument(address: str) -> None:
+def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
     """
     Attempts to automatically detect and connect to an instrument by querying IDN
     the result is matched to a driver and instantiate a connection and return
 
-    This should return with the instrument object, not None.
+    This should return with the instrument object. Need to add type hinting
     """
     rm = pyvisa.ResourceManager()
-    # inst = rm.open_resource(address)
-    # IDN = inst.query("*IDN?")
-    # match IDN:
-    #     case "IDN for keithley":
-    #         ...
-    #     case "IDN for lakeshore":
-    #         ...
-    #     case "IDN for TM620":
-    #         ...
-    #     case "IDN for M4G":
-    #         ...
-    ...
+    inst = rm.open_resource(address)
+    IDN = ""
+    
+    try:
+        IDN = inst.query("*IDN?")
+        inst.close()
+    except Exception as e:
+        # We need this to fail otherwise the app will incorrectly add the instrument to the list of available instruments. 
+        inst.close()
+        raise(f"Error querying IDN: {e}")
+    
+    # TODO: prompt for name, kwargs
+    # See connect_device() from Spearmint.
+    match IDN.split(',')[1]:
+        case "MODEL 2450":
+            new_dev = Keithley2450("k2450", address, *args, **kwargs)
+        case "MODEL336":
+            new_dev = LakeshoreModel336("ls336", address, *args, **kwargs)
+        case "IDN for TM620":
+            ...
+        case "4G":
+            ...
+    return new_dev
 
 def list_avail_instrument_params(instrument):
     """
