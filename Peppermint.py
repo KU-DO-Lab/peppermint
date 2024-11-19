@@ -34,7 +34,7 @@ class Peppermint(App):
         if hasattr(self, 'connected_instrument_list'):
             self.connected_instrument_list.clear_options()
             for instrument in connected_instruments:
-                self.connected_instrument_list.add_option(instrument)
+                self.connected_instrument_list.add_option(instrument.name)
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -106,7 +106,7 @@ class Peppermint(App):
         try:
             # Do the connection procses here- right now it just tries the auto-connect, but we will later handle
             # manual connection here.
-            new_instrument = auto_connect_instrument(name="", address=instrument_address)
+            new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
             
             # Create a new list with the additional instrument
             new_connected = self.connected_instruments.copy()

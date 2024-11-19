@@ -23,6 +23,11 @@ def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
 
     This should return with the instrument object. Need to add type hinting
     """
+
+    # If we need to test without access to the lab hardware, just create a dummy instrument
+    if name == "dummy":
+        return Keithley2450("dummy_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
+
     rm = pyvisa.ResourceManager()
     inst = rm.open_resource(address)
     IDN = ""
@@ -33,7 +38,7 @@ def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
     except Exception as e:
         # We need this to fail otherwise the app will incorrectly add the instrument to the list of available instruments. 
         inst.close()
-        raise(f"Error querying IDN: {e}")
+        raise(f"Error querying IDN : {e}")
     
     # TODO: prompt for name, kwargs
     # See connect_device() from Spearmint.
