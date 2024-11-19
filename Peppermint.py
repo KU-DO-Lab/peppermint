@@ -99,27 +99,33 @@ class Peppermint(App):
     @on(Select.Changed)
     def handle_parameter_instrument_changed(self, event: Select.Changed) -> None:
         """Fetch the new parameters for an instrument when that instrument is changed."""
+
+        # Grab the actual instrument object from the name of the instrument in the select menu
         selected_instrument: Optional[VisaInstrument] = next(
             (inst for inst in self.connected_instruments if inst.name == self.parameters_connected_instrument_list.value),
             None  # If for whatever reason an instrument can't be found this is set to none
         )
 
         if selected_instrument is None:
-            # self.notify("No instrument selected")
             return
 
         available_parameters = get_avail_instrument_params(selected_instrument)
+        self.available_parameters.clear_options()
+        for param in available_parameters:
+            self.available_parameters.add_option(param)
 
         
     
     def connect_instrument(self, instrument_address: str) -> bool:
         """
         Connect to an instrument and update the connected instruments list.
-        Returns True if connection was successful.
+
+        Returns True if connection was successful. Would probably be better to have this fail and handle the error instead.
         """
         try:
             # TODO: need to prompt for an instrument name here
             #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
+
             # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
             new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
             
