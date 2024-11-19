@@ -1,0 +1,6 @@
+/* Utility classes */
+.centered-widget {
+    width: 30%;
+    align-horizontal: center;
+}
+

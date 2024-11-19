@@ -5,13 +5,13 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList
+from textual.widgets import Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select
 
 class Peppermint(App):
     """A Textual app to manage instruments."""
-    CSS_PATH = "peppermint.tcss"
+    CSS_PATH = "Peppermint.tcss"
 
-    # It would be good to be able to set bindings for each page
+    # Not implemented yet, but we will want to have different bindings for each page.
     BINDINGS = []
     TMP_BINDINGS = []
     INSTRUMENTS_TAB_BINDINGS = [
@@ -19,7 +19,7 @@ class Peppermint(App):
         Binding("m", "manual_connect", "Connect an Instrument Manually", show=True),
     ]
     
-    # Make detected instruments reactive as well since it might change
+    # Lists for the instruments are reactive, since they can change
     detected_instruments = reactive(list)
     connected_instruments = reactive(list)
 
@@ -29,12 +29,12 @@ class Peppermint(App):
         self.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
         self.connected_instruments = []
 
-    # def watch_connected_instruments(self, connected_instruments: list) -> None:
-    #     """React to changes in connected instruments list."""
-    #     if hasattr(self, 'connected_instrument_list'):
-    #         self.connected_instrument_list.clear_options()
-    #         for instrument in connected_instruments:
-    #             self.connected_instrument_list.add_option(instrument)
+    def watch_connected_instruments(self, connected_instruments: list) -> None:
+        """React to changes in connected instruments list."""
+        if hasattr(self, 'connected_instrument_list'):
+            self.connected_instrument_list.clear_options()
+            for instrument in connected_instruments:
+                self.connected_instrument_list.add_option(instrument)
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -49,11 +49,13 @@ class Peppermint(App):
                     Vertical(Label("Connected Instruments"), self.connected_instrument_list),
                 )
             with TabPane("Parameters", id="parameters_tab"):
+                self.parameters_connected_instrument_list = Select([(element, element) for element in self.connected_instruments])
+                self.available_parameters = OptionList()
                 yield Horizontal(
                     Horizontal(),  # Left spacer
                     Vertical(
-                        OptionList(*self.connected_instruments),
-                        classes="centered-option-list"
+                        Label("Connected Instruments"), self.parameters_connected_instrument_list,
+                        Label("Available Parameters"), self.available_parameters
                     ),
                     Horizontal()   # Right spacer
                 )
@@ -86,12 +88,15 @@ class Peppermint(App):
             self.notify("Instrument already connected")
             return
 
-        # If the instrument successfully/fails connects
         if self.connect_instrument(instrument_address):
             self.notify(f"Successfully connected to {instrument_address}")
         else:
             self.notify("Failed to connect to instrument\nTry manually connecting.")
 
+    @on(Select.Changed)
+    def handle_parameter_instrument_changed(self, event: Select.Changed) -> None:
+        """Fetch the new parameters for an instrument when that instrument is changed."""
+        ...
     
     def connect_instrument(self, instrument_address: str) -> bool:
         """
@@ -99,13 +104,15 @@ class Peppermint(App):
         Returns True if connection was successful.
         """
         try:
-            # Attempt to auto-connect to the instrument
+            # Do the connection procses here- right now it just tries the auto-connect, but we will later handle
+            # manual connection here.
             auto_connect_instrument(instrument_address)
             
             # Create a new list with the additional instrument
             new_connected = self.connected_instruments.copy()
             new_connected.append(instrument_address)
-            self.connected_instruments = new_connected  # Directly overwrite to trigger a reactive update
+            self.connected_instruments = new_connected  # Trigger reactive update
+            update_select(self.parameters_connected_instrument_list, new_connected)
             
             return True
         except Exception as e:
