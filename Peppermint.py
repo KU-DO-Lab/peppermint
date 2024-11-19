@@ -1,4 +1,5 @@
 import pyvisa
+from qcodes.instrument import VisaInstrument
 from utils.util import *
 from textual import on
 from textual.app import App, ComposeResult
@@ -20,8 +21,8 @@ class Peppermint(App):
     ]
     
     # Lists for the instruments are reactive, since they can change
-    detected_instruments = reactive(list)
-    connected_instruments = reactive(list) # This is going to be a list of instrument objects, so we will have to think of a good way to manage display data for it.
+    detected_instruments: reactive[list[str]] = reactive(list)
+    connected_instruments: reactive[list[VisaInstrument]] = reactive(list) 
 
     def __init__(self):
         super().__init__()
@@ -49,7 +50,7 @@ class Peppermint(App):
                     Vertical(Label("Connected Instruments"), self.connected_instrument_list),
                 )
             with TabPane("Parameters", id="parameters_tab"):
-                self.parameters_connected_instrument_list = Select([(element, element) for element in self.connected_instruments])
+                self.parameters_connected_instrument_list = Select([(element.name, element.name) for element in self.connected_instruments])
                 self.available_parameters = OptionList()
                 yield Horizontal(
                     Horizontal(),  # Left spacer
@@ -106,13 +107,13 @@ class Peppermint(App):
         try:
             # Do the connection procses here- right now it just tries the auto-connect, but we will later handle
             # manual connection here.
-            new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+            new_instrument = auto_connect_instrument(name="", address=instrument_address)
             
             # Create a new list with the additional instrument
             new_connected = self.connected_instruments.copy()
             new_connected.append(new_instrument)
             self.connected_instruments = new_connected  # Trigger reactive update
-            update_select(self.parameters_connected_instrument_list, new_connected)
+            update_select(self.parameters_connected_instrument_list, [instrument.name for instrument in new_connected])
             
             return True
         except Exception as e:
