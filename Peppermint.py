@@ -11,7 +11,7 @@ from textual.reactive import reactive
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid
-from textual.widgets import DataTable, Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder
+from textual.widgets import DataTable, Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder, ListView, ListItem
 
 
 @dataclass
@@ -31,7 +31,7 @@ class ManualConnectionDialog(ModalScreen):
     def compose(self) -> ComposeResult:
         yield Grid(
             Label("Manual Connection", id="title"),
-            Placeholder("Placeholder.", id="wide"),
+            Placeholder("Placeholder.", id="tmp"),
             # Input(placeholder="A number", type="number"),
             Button("Cancel", variant="primary", id="cancel"),
             Button("Confirm", variant="primary", id="confirm"),
@@ -101,23 +101,20 @@ class InstrumentsScreen(Screen):
             for instrument in connected_instruments:
                 self.connected_instrument_list.add_option(instrument.name)
 
-    def manual_connection(self) -> None:
-        app.push_screen('')
-        ...
-
 
 class ParametersScreen(Screen):
     """Everything that will be displayed on the "Parameters" Tab."""
 
     BINDINGS = [
-        Binding("m", "manual_connect", "Connect an Instrument Manually", show=True),
+        ("r", "set_parameter_read", "Set Read Param"),
+        ("w", "set_parameter_write", "Set Write Param"),
     ]
 
     def compose(self) -> ComposeResult: 
         yield Header()
         instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
         self.connected_instrument_list = Select[str](options=instrument_options)
-        self.available_parameters: OptionList = OptionList()
+        self.available_parameters: ListView = ListView()
         self.followed_parameters: DataTable = DataTable()
         self.set_parameters: DataTable = DataTable()
         yield Horizontal(
@@ -147,10 +144,15 @@ class ParametersScreen(Screen):
         if selected_instrument is None:
             return
 
-        available_parameters = get_avail_instrument_params(selected_instrument)
-        self.available_parameters.clear_options()
-        for param in available_parameters:
-            self.available_parameters.add_option(param)
+        self.available_parameters.clear()
+        for key, p in selected_instrument.parameters.items():
+            self.available_parameters.append(ListItem(Label(p.full_name)))
+
+
+    def action_set_parameter_read(self) -> None:
+        """Make the parameter read"""
+        self.notify("test")
+
 
 
 class TemperatureScreen(Screen):
