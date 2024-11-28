@@ -10,8 +10,8 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
-from textual.containers import Horizontal, Vertical, Container
-from textual.widgets import DataTable, Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button
+from textual.containers import Horizontal, Vertical, Grid
+from textual.widgets import DataTable, Footer, Header, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder
 
 
 @dataclass
@@ -24,19 +24,25 @@ class SharedState():
 
 
 class ManualConnectionDialog(ModalScreen):
-    def __init__(self, shared_state: SharedState):
-        shared_state = shared_state
+    """TODO: make this do something, add the right widgets"""
+
+    BINDINGS = [("escape", "app.pop_screen", "Pop screen")]
 
     def compose(self) -> ComposeResult:
-        with Container(classes="dialog"):
-            yield Label("Enter Values", classes="dialog-label")
-            yield Input(placeholder="An integer", type="integer")
-            yield Input(placeholder="A number", type="number")
-            yield Button("Confirm", variant="primary", id="confirm")
+        yield Grid(
+            Label("Manual Connection", id="title"),
+            Placeholder("Placeholder.", id="wide"),
+            # Input(placeholder="A number", type="number"),
+            Button("Cancel", variant="primary", id="cancel"),
+            Button("Confirm", variant="primary", id="confirm"),
+            id="dialog",
+        )
 
 
 class InstrumentsScreen(Screen):
     """Everything that will be displayed on the "Instruments" Tab."""
+
+    BINDINGS = [("m", "app.push_screen('manual_connection_dialog')", "Manual Connection")]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -94,6 +100,10 @@ class InstrumentsScreen(Screen):
             self.connected_instrument_list.clear_options()
             for instrument in connected_instruments:
                 self.connected_instrument_list.add_option(instrument.name)
+
+    def manual_connection(self) -> None:
+        app.push_screen('')
+        ...
 
 
 class ParametersScreen(Screen):
@@ -207,6 +217,7 @@ class Peppermint(App):
     SCREENS = { 
         "instrument_screen": InstrumentsScreen, #type: ignore
         "parameter_screen": ParametersScreen, #type: ignore
+        "manual_connection_dialog": ManualConnectionDialog, #type: ignore
     }
 
     def on_mount(self) -> None:
