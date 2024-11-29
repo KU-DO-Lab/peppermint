@@ -163,17 +163,6 @@ class ParametersScreen(Screen):
             self.notify("Already reading parameter")
             return 
         else:
-            selected_parameter: ListItem | None = self.available_parameters.highlighted_child
-
-            # If there are weird children or the widget is changed to something other than a Static, this will probably break!
-            try:
-                # these are he hoops I have to jump through to extract the text from the selected widget
-                new_parameter_name: str = selected_parameter.children[0].render()._renderable # type: ignore
-            except: 
-                self.notify("someone broke the params list widget. it should be a static.")
-                return 
-
-            print(new_parameter_name)
             self.available_parameters.highlighted_child.add_class("read")
 
     def action_set_parameter_write(self) -> None:
@@ -186,16 +175,8 @@ class ParametersScreen(Screen):
             self.notify("Already reading parameter")
             return 
         else:
-            selected_parameter: ListItem | None = self.available_parameters.highlighted_child
-
-            # If there are weird children or the widget is changed to something other than a Static, this will probably break!
-            try:
-                # these are he hoops I have to jump through to extract the text from the selected widget
-                new_parameter_name: str = selected_parameter.children[0].render()._renderable # type: ignore
-            except: 
-                self.notify("someone broke the params list widget. it should be a static.")
-                return 
-
+            selected_parameter = self.available_parameters.highlighted_child
+            new_parameter_name = selected_parameter.children[0].render()._renderable # these are the hoops I have to jump through to extract text content from a static... type: ignore
             print(new_parameter_name)
             selected_parameter.add_class("write")
             self.app.shared_state.write_parameters.append(new_parameter_name)
