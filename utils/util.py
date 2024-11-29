@@ -67,12 +67,6 @@ def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
             ...
     return new_dev
 
-def get_avail_instrument_params(instrument: VisaInstrument) -> list[str]:
-    """
-    Returns a list of available parameters directly, given an instrument.
-    """
-    return [p.full_name for key, p in instrument.parameters.items()]
-
 def list_avail_instrument_params(instrument: VisaInstrument) -> None:
     """
     Lists available parameters for the instrument passed.

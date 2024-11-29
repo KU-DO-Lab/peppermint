@@ -115,8 +115,8 @@ class ParametersScreen(Screen):
         instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
         self.connected_instrument_list = Select[str](options=instrument_options)
         self.available_parameters: ListView = ListView()
-        self.followed_parameters: DataTable = DataTable()
-        self.set_parameters: DataTable = DataTable()
+        self.followed_parameters: ListView = ListView()
+        self.set_parameters: ListView = ListView()
         yield Horizontal(
             # I am very bad at CSS, this needs changed to use it lmao -Grant
             Vertical(
@@ -148,10 +148,23 @@ class ParametersScreen(Screen):
         for key, p in selected_instrument.parameters.items():
             self.available_parameters.append(ListItem(Label(p.full_name)))
 
-
     def action_set_parameter_read(self) -> None:
-        """Make the parameter read"""
-        self.notify("test")
+        """Assign the parameter active read mode."""
+        if "read" in self.available_parameters.highlighted_child.classes:
+            self.notify("Already reading parameter")
+            return 
+        else:
+            self.available_parameters.highlighted_child.add_class("read")
+
+    def action_set_parameter_write(self) -> None:
+        """Assign the parameter active write mode."""
+        if "write" in self.available_parameters.highlighted_child.classes:
+            self.notify("Already reading parameter")
+            return 
+        else:
+            self.available_parameters.highlighted_child.add_class("write")
+
+
 
 
 
@@ -210,7 +223,7 @@ class Peppermint(App):
     shared_state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
     shared_state.connected_instruments = []
 
-    CSS_PATH = "Peppermint.tcss"
+    CSS_PATH = "Peppermint.css"
 
     BINDINGS = [
         ("i", "push_screen('instrument_screen')", "Instruments"),
