@@ -31,7 +31,7 @@ def match_instrument_name_to_object(name: str, instrument_list) -> Optional[Visa
         return None
 
 # This and connect instrument should be renamed to something a bit clearer.
-def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
+def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     """
     Attempts to automatically detect and connect to an instrument by querying IDN
     the result is matched to a driver and instantiate a connection and return
@@ -49,6 +49,7 @@ def auto_connect_instrument(name: str, address: str, args=[], kwargs={}):
     
     try:
         IDN = inst.query("*IDN?")
+        print(IDN)
         inst.close()
     except Exception as e:
         # We need this to fail otherwise the app will incorrectly add the instrument to the list of available instruments. 

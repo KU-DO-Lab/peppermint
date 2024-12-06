@@ -11,7 +11,7 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
-from textual.containers import Horizontal, Vertical, Grid
+from textual.containers import Horizontal, Vertical, Grid, Container
 from textual.widgets import DataTable, Footer, Header, Static, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder, ListView, ListItem
 
 
@@ -45,12 +45,12 @@ class ManualConnectionDialog(ModalScreen):
 class InstrumentsScreen(Screen):
     """Everything that will be displayed on the "Instruments" Tab."""
 
-    BINDINGS = [("m", "app.push_screen('manual_connection_dialog')", "Manual Connection")]
+    BINDINGS = [("m", "app.push_screen('manual_connection_dialog')", "Manual Connection"), ("b", "app.dismiss()")]
 
     def compose(self) -> ComposeResult:
         yield Header()
         self.detected_instrument_list: OptionList = OptionList(*self.app.shared_state.detected_instruments)
-        self.connected_instrument_list: OptionList = OptionList()  # Start empty
+        self.connected_instrument_list: OptionList = OptionList(*self.app.shared_state.connected_instruments)  # Start empty
         yield Horizontal(
             Vertical(Label("Detected Instruments"), self.detected_instrument_list),
             Vertical(Label("Connected Instruments"), self.connected_instrument_list),
@@ -66,6 +66,7 @@ class InstrumentsScreen(Screen):
 
         option = event.option_list.get_option_at_index(event.option_index)
         instrument_address = option.prompt
+        print(instrument_address)
 
         # TODO: Check if instrument is already connected
         # print(self.app.shared_state.connected_instruments)
@@ -78,24 +79,23 @@ class InstrumentsScreen(Screen):
             self.notify(f"Successfully connected to {instrument_address}")
         except Exception as e:
             self.notify("Failed to connect to instrument\nTry manually connecting.")
+            logging.error(f"Failed to connect to {instrument_address}: {e}")
 
     def connect_instrument(self, instrument_address: str) -> None:
         """Connect to an instrument and update the connected instruments list. """
-        try:
-            # TODO: need to prompt for an instrument name here
-            #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
+        # TODO: need to prompt for an instrument name here
+        #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
-            # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-            new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
-
-            # Create a new list with the additional instrument
-            new_connected = self.app.shared_state.connected_instruments.copy()
-            new_connected.append(new_instrument)
-            self.app.shared_state.connected_instruments = new_connected  # Trigger reactive update
-            self.watch_connected_instruments(self.app.shared_state.connected_instruments)
-
-        except Exception as e:
-            logging.error(f"Failed to connect to {instrument_address}: {e}")
+        # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
+        new_instrument = auto_connect_instrument( address=instrument_address)
+        print("auto_connected")
+        # Create a new list with the additional instrument
+        new_connected = self.app.shared_state.connected_instruments.copy()
+        new_connected.append(new_instrument)
+        self.app.shared_state.connected_instruments = new_connected  # Trigger reactive update
+        self.watch_connected_instruments(self.app.shared_state.connected_instruments)
+        print(self.app.shared_state.connected_instruments)
+        
 
     def watch_connected_instruments(self, connected_instruments: list) -> None:
         """React to changes in connected instruments list."""
@@ -248,7 +248,21 @@ class ActionQueueScreen(Screen):
                 yield Label()
         yield Footer()
 
-
+class MainScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        with Container(id="main-menu-grid"):
+            with Container(id="left-pane"):
+                yield Button("Instruments", id="isnt_button")
+                yield Button("Experiments", id="exp_button")
+                yield Button("Settings", id="settings_button")
+            with Container(id="inst-list"):
+                yield Label("Connected Instruments")
+                yield ListView(*self.app.shared_state.connected_instruments)
+    @on(Button.Pressed, "#isnt_button")
+    def inst_button(self):
+        self.app.push_screen("instrument_screen")
+        
 class Peppermint(App):
     """A Textual app to manage instruments."""
 
@@ -264,15 +278,17 @@ class Peppermint(App):
     BINDINGS = [
         ("i", "push_screen('instrument_screen')", "Instruments"),
         ("p", "push_screen('parameter_screen')", "Parameters"),
+        ("a", "push_screen('main_screen')", "Main Screen")
     ]
     SCREENS = { 
         "instrument_screen": InstrumentsScreen, #type: ignore
         "parameter_screen": ParametersScreen, #type: ignore
         "manual_connection_dialog": ManualConnectionDialog, #type: ignore
+        "main_screen": MainScreen
     }
-
+    
     def on_mount(self) -> None:
-        self.push_screen('instrument_screen')
+        self.push_screen('main_screen')
 
 
 if __name__ == "__main__":
