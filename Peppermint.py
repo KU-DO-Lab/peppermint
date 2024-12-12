@@ -4,17 +4,18 @@ from dataclasses import dataclass
 import logging
 
 import pyvisa
+from qcodes.parameters import Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
-from qcodes.parameters import Parameter
 from qcodes.dataset import experiments, initialise_or_create_database_at
+from textual.widget import Widget
 from utils.util import *
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
-from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import DataTable, Footer, Header, Static, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder, ListView, ListItem
+from textual.containers import Horizontal, HorizontalGroup, HorizontalScroll, Vertical, Grid, Container
+from textual.widgets import Collapsible, DataTable, Footer, Header, Pretty, Static, Switch, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder, ListView, ListItem
 
 
 @dataclass
@@ -71,7 +72,7 @@ class InstrumentsScreen(Screen):
         print(instrument_address)
 
         try:
-            self.connect_instrument(instrument_address)
+            self.connect_instrument(str(instrument_address))
             self.notify(f"Successfully connected to {instrument_address}")
         except Exception as e:
             self.notify("Failed to connect to instrument\nTry manually connecting.")
@@ -83,8 +84,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        new_instrument = auto_connect_instrument(address=instrument_address)
-        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        # new_instrument = auto_connect_instrument(address=instrument_address)
+        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
         print("auto_connected")
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -116,19 +117,19 @@ class ParametersScreen(Screen):
         instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
         self.connected_instrument_list = Select[str](options=instrument_options)
         self.available_parameters: ListView = ListView()
-        self.followed_parameters: ListView = ListView()
-        self.set_parameters: ListView = ListView()
+        self.read_parameters: ListView = ListView()
+        self.write_parameters: ListView = ListView()
         yield Horizontal(
             # I am very bad at CSS, this needs changed to use it lmao -Grant
             Vertical(
-                Label("Followed Parameters"), self.followed_parameters
+                Label("Followed Parameters"), self.read_parameters
             ),
             Vertical(
                 Label("Connected Instruments"), self.connected_instrument_list,
                 Label("Available Parameters"), self.available_parameters
             ),
             Vertical(
-                Label("Set Parameters"), self.set_parameters
+                Label("Set Parameters"), self.write_parameters
             ))
         yield Footer()
 
@@ -147,7 +148,7 @@ class ParametersScreen(Screen):
 
         self.available_parameters.clear()
         for key, p in selected_instrument.parameters.items():
-            self.available_parameters.append(ListItem(Static(p.full_name)))
+            self.available_parameters.append(ListItem(Static(p.name)))
 
     def action_set_parameter_read(self) -> None:
         """Sets parameter to active read mode"""
@@ -167,18 +168,19 @@ class ParametersScreen(Screen):
             if not instrument:
                 raise ValueError("No instrument selected")
                 
-            key: str = param_name[len(instrument.name) + 1:]
-            param: qcodes.parameters.parameter.Parameter = instrument.parameters[key]
+            param: ParameterBase = instrument.parameters[param_name]
+
+            if not param.gettable:
+                self.notify("parameter is not writeable!")
+                return
             
             selected.add_class("read")
-            self.app.shared_state.read_parameters.append(param)
+            self.app.shared_state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
 
-            # print(param.gettable)
-            # print(param.get())
-            # print(param.settable)
-            
-        except (AttributeError, IndexError):
-            self.notify("Invalid parameter widget structure")
+            self.read_parameters.append(ListItem(ParameterWidget(param, readonly=True)))
+
+        # except (AttributeError, IndexError):
+        #     self.notify("Invalid parameter widget structure")
         except StopIteration:
             self.notify("No instrument selected")
         except Exception as e:
@@ -206,11 +208,15 @@ class ParametersScreen(Screen):
             if not instrument:
                 raise ValueError("No instrument selected")
                 
-            key: str = param_name[len(instrument.name) + 1:]
-            param: qcodes.parameters.parameter.Parameter = instrument.parameters[key]
-            
+            param: ParameterBase = instrument.parameters[param_name]
+
+            if not param.settable:
+                self.notify("parameter is not writeable!")
+                return 
+
             selected.add_class("write")
-            self.app.shared_state.write_parameters.append(param)
+            self.app.shared_state.write_parameters.append(param) # in case the parameter needs to be accessed in a database
+            self.write_parameters.append(ListItem(Label(param.full_name)))
 
         except (AttributeError, IndexError):
             self.notify("Invalid parameter widget structure")
@@ -218,6 +224,12 @@ class ParametersScreen(Screen):
             self.notify("No instrument selected")
         except Exception as e:
             self.notify(f"Error: {str(e)}")
+
+
+
+    # def append_readwrite_parameters(self, list_to_update) -> None: 
+    #     """for updating self.read_parameters and self.write_parameters"""
+
 
         
 class TemperatureScreen(Screen):

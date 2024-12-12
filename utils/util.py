@@ -1,64 +1,122 @@
 import pyvisa
 from qcodes.instrument import VisaInstrument
-from textual.widgets import OptionList, Select
+from qcodes.parameters import ParameterBase
+from textual.app import ComposeResult
+from textual.containers import Horizontal
+from textual.events import Compose
+from textual.widget import Widget
+from textual.widgets import Collapsible, Input, OptionList, Pretty, Select, Static, Switch
 from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
 from textual.reactive import reactive
 from typing import Optional
 
-# stolen from Spearmint
-def safe_set(p, value, last_try=False):
-    """
-    Alerts the user when a parameter can not be set to the chosen value.
-    
-    Parameters
-    ---------
-    p:
-        The parameter to be set.
-    value:
-        The desired value.
-    last_try:
-        Flag to stop attempting to set the value.
-    """
-    
-    ret = None
-    try:
-        ret = p.set(value)
-    except Exception as e:
-        if last_try is False:
-            print(f"Couldn't set {p.name} to {value}. Trying again.", e)
-            time.sleep(1)
-            return safe_set(p, value, last_try=True)
-        else:
-            print(f"Still couldn't set {p.name} to {value}. Giving up.", e)
-            raise ParameterException(f"Couldn't set {p.name} to {value}.", set=True)
-    return ret
 
-# stolen from Spearmint
-def safe_get(p, last_try=False):
-    """
-    Alerts the user when a parameter's value can not be obtained.
-    
-    Parameters
-    ---------
-    p:
-        The parameter to be measured.
-    last_try:
-        Flag to stop attempting to set the value.
-    """
-    
-    ret = None
-    try:
-        ret = p.get()
-    except Exception as e:
-        if last_try is False:
-            print(f"Couldn't get {p.name}. Trying again.", e)
-            time.sleep(1)
-            return safe_get(p, last_try=True)
+class ParameterWidget(Widget):
+    def __init__(self, param, readonly):
+        super().__init__()
+        self.param: ParameterBase = param
+        self.readonly: bool | None = readonly
+        self.update_timer = None
+
+    def compose(self) -> ComposeResult:
+        yield Collapsible(
+            Pretty(self.param.get()),
+            Horizontal(
+                Static("Live Update:     ", classes="label"), 
+                Switch(id="live_toggle", value=True),
+                classes="container"
+            ),
+            Input(id="update_freq", placeholder="Update Frequency (hz)"),
+            classes="parameter_entry",
+            title=self.param.full_name,
+        )
+
+    def on_switch_changed(self, event: Switch.Changed) -> None:
+        if event.switch.value:
+            self.start_updates()
         else:
-            print(f"Still couldn't get {p.name}. Giving up.", e)
-            raise ParameterException(f'Could not get {p.name}.', set=False)
-    return ret
+            self.stop_updates()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.value:
+            try:
+                freq = float(event.input.value)
+                self.restart_updates(freq)
+            except ValueError:
+                pass
+
+    def on_mount(self) -> None:
+        self.start_updates()
+
+    def start_updates(self, freq=1.0):
+        self.stop_updates()
+        self.update_timer = self.set_interval(1/freq, self.update_value)
+        
+    def stop_updates(self):
+        if self.update_timer:
+            self.update_timer.stop()
+
+    def restart_updates(self, freq):
+        self.start_updates(freq)
+        
+    def update_value(self):
+        self.query_one(Pretty).update(self.param.get())
+
+
+# # stolen from Spearmint
+# def safe_set(p, value, last_try=False):
+#     """
+#     Alerts the user when a parameter can not be set to the chosen value.
+#
+#     Parameters
+#     ---------
+#     p:
+#         The parameter to be set.
+#     value:
+#         The desired value.
+#     last_try:
+#         Flag to stop attempting to set the value.
+#     """
+#
+#     ret = None
+#     try:
+#         ret = p.set(value)
+#     except Exception as e:
+#         if last_try is False:
+#             print(f"Couldn't set {p.name} to {value}. Trying again.", e)
+#             time.sleep(1)
+#             return safe_set(p, value, last_try=True)
+#         else:
+#             print(f"Still couldn't set {p.name} to {value}. Giving up.", e)
+#             raise ParameterException(f"Couldn't set {p.name} to {value}.", set=True)
+#     return ret
+#
+# # stolen from Spearmint
+# def safe_get(p, last_try=False):
+#     """
+#     Alerts the user when a parameter's value can not be obtained.
+#
+#     Parameters
+#     ---------
+#     p:
+#         The parameter to be measured.
+#     last_try:
+#         Flag to stop attempting to set the value.
+#     """
+#
+#     ret = None
+#     try:
+#         ret = p.get()
+#     except Exception as e:
+#         if last_try is False:
+#             print(f"Couldn't get {p.name}. Trying again.", e)
+#             time.sleep(1)
+#             return safe_get(p, last_try=True)
+#         else:
+#             print(f"Still couldn't get {p.name}. Giving up.", e)
+#             raise ParameterException(f'Could not get {p.name}.', set=False)
+#     return ret
 
 
 def update_option_list(option_list: OptionList, items: list):
