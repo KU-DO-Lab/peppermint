@@ -1,3 +1,4 @@
+import os
 from typing import TYPE_CHECKING, Optional
 from dataclasses import dataclass
 import logging
@@ -5,6 +6,7 @@ import logging
 import pyvisa
 from qcodes.instrument import VisaInstrument
 from qcodes.parameters import Parameter
+from qcodes.dataset import experiments, initialise_or_create_database_at
 from utils.util import *
 from textual import events, on
 from textual.app import App, ComposeResult
@@ -24,7 +26,7 @@ class SharedState():
         connected_instruments: reactive[list[VisaInstrument]] = reactive(list) 
         read_parameters: reactive[list[Parameter]] = reactive(list)
         write_parameters: reactive[list[Parameter]] = reactive(list)
-
+        database_path: str = ""
 
 class ManualConnectionDialog(ModalScreen):
     """TODO: make this do something, add the right widgets"""
@@ -68,12 +70,6 @@ class InstrumentsScreen(Screen):
         instrument_address = option.prompt
         print(instrument_address)
 
-        # TODO: Check if instrument is already connected
-        # print(self.app.shared_state.connected_instruments)
-        # if instrument_address in [instrument.address for instrument in self.app.shared_state.connected_instruments]:
-            # self.notify("Instrument already connected")
-            # return
-
         try:
             self.connect_instrument(instrument_address)
             self.notify(f"Successfully connected to {instrument_address}")
@@ -87,9 +83,10 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        new_instrument = auto_connect_instrument( address=instrument_address)
+        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
         print("auto_connected")
         # Create a new list with the additional instrument
+        # directly overwriting this way is necessary to update the reactive variable
         new_connected = self.app.shared_state.connected_instruments.copy()
         new_connected.append(new_instrument)
         self.app.shared_state.connected_instruments = new_connected  # Trigger reactive update
@@ -151,33 +148,40 @@ class ParametersScreen(Screen):
         for key, p in selected_instrument.parameters.items():
             self.available_parameters.append(ListItem(Static(p.full_name)))
 
-    def action_set_parameter(self, event: events.Key) -> None: 
-        """Planned refactor to just use the event key ("r" or "w") to assign class and set/get"""
-        ...
-
     def action_set_parameter_read(self) -> None:
-        """
-        Assign the parameter active read mode.
+        """Sets parameter to active read mode"""
+        selected: ListItem | None = self.available_parameters.highlighted_child
+        
+        if not selected or "read" in selected.classes or "write" in selected.classes:
+            self.notify("Already reading/writing parameter" if selected else "No parameter selected")
+            return
 
-        TODO: switching back-forth from read/write
+        try:
+            param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+            instrument: Optional[VisaInstrument] = next(
+                inst for inst in self.app.shared_state.connected_instruments 
+                if inst.name == self.connected_instrument_list.value
+            )
+            
+            if not instrument:
+                raise ValueError("No instrument selected")
+                
+            key: str = param_name[len(instrument.name) + 1:]
+            param: qcodes.parameters.parameter.Parameter = instrument.parameters[key]
+            
+            selected.add_class("read")
+            self.app.shared_state.read_parameters.append(param)
 
-        """
-        if "read" in self.available_parameters.highlighted_child.classes:
-            self.notify("Already reading parameter")
-            return 
-        else:
-            selected_parameter: ListItem | None = self.available_parameters.highlighted_child
-
-            # If there are weird children or the widget is changed to something other than a Static, this will probably break!
-            try:
-                # these are he hoops I have to jump through to extract the text from the selected widget
-                new_parameter_name: str = selected_parameter.children[0].render()._renderable # type: ignore
-            except: 
-                self.notify("someone broke the params list widget. it should be a static.")
-                return 
-
-            print(new_parameter_name)
-            self.available_parameters.highlighted_child.add_class("read")
+            # print(param.gettable)
+            # print(param.get())
+            # print(param.settable)
+            
+        except (AttributeError, IndexError):
+            self.notify("Invalid parameter widget structure")
+        except StopIteration:
+            self.notify("No instrument selected")
+        except Exception as e:
+            self.notify(f"Error: {str(e)}")
 
     def action_set_parameter_write(self) -> None:
         """
@@ -185,26 +189,36 @@ class ParametersScreen(Screen):
 
         TODO: switching back-forth from read/write, set experiment
         """
-        if "write" in self.available_parameters.highlighted_child.classes:
-            self.notify("Already reading parameter")
-            return 
-        else:
-            selected_parameter: ListItem | None = self.available_parameters.highlighted_child
+        selected: ListItem | None = self.available_parameters.highlighted_child
+        
+        if not selected or "read" in selected.classes or "write" in selected.classes:
+            self.notify("Already reading/writing parameter" if selected else "No parameter selected")
+            return
 
-            # If there are weird children or the widget is changed to something other than a Static, this will probably break!
-            try:
-                # these are he hoops I have to jump through to extract the text from the selected widget
-                new_parameter_name: str = selected_parameter.children[0].render()._renderable # type: ignore
-            except: 
-                self.notify("someone broke the params list widget. it should be a static widget.")
-                return 
+        try:
+            param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+            instrument: Optional[VisaInstrument] = next(
+                inst for inst in self.app.shared_state.connected_instruments 
+                if inst.name == self.connected_instrument_list.value
+            )
+            
+            if not instrument:
+                raise ValueError("No instrument selected")
+                
+            key: str = param_name[len(instrument.name) + 1:]
+            param: qcodes.parameters.parameter.Parameter = instrument.parameters[key]
+            
+            selected.add_class("write")
+            self.app.shared_state.write_parameters.append(param)
 
-            print(new_parameter_name)
-            p = Parameter(name=new_parameter_name, label="", unit="", )
-            selected_parameter.add_class("write")
-            self.app.shared_state.write_parameters.append(new_parameter_name)
+        except (AttributeError, IndexError):
+            self.notify("Invalid parameter widget structure")
+        except StopIteration:
+            self.notify("No instrument selected")
+        except Exception as e:
+            self.notify(f"Error: {str(e)}")
 
-
+        
 class TemperatureScreen(Screen):
     """TODO"""
     BINDINGS = [] 
@@ -275,7 +289,7 @@ class Peppermint(App):
     shared_state.connected_instruments = []
     shared_state.write_parameters = []
     shared_state.read_parameters = []
-
+    shared_state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
 
     CSS_PATH = "Peppermint.css"
 
@@ -284,6 +298,7 @@ class Peppermint(App):
         ("p", "push_screen('parameter_screen')", "Parameters"),
         ("a", "push_screen('main_screen')", "Main Screen")
     ]
+
     SCREENS = { 
         "instrument_screen": InstrumentsScreen, #type: ignore
         "parameter_screen": ParametersScreen, #type: ignore
@@ -293,7 +308,7 @@ class Peppermint(App):
     
     def on_mount(self) -> None:
         self.push_screen('main_screen')
-
+        # initialise_or_create_database_at(self.shared_state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
 
 if __name__ == "__main__":
     app = Peppermint()
