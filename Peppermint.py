@@ -84,8 +84,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        new_instrument = auto_connect_instrument(address=instrument_address)
-        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        # new_instrument = auto_connect_instrument(address=instrument_address)
+        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
         print("auto_connected")
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -122,7 +122,7 @@ class ParametersScreen(Screen):
         yield Horizontal(
             # I am very bad at CSS, this needs changed to use it lmao -Grant
             Vertical(
-                Label("Followed Parameters"), self.read_parameters
+                Label("Read Parameters"), self.read_parameters
             ),
             Vertical(
                 Label("Connected Instruments"), self.connected_instrument_list,
