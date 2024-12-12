@@ -1,21 +1,18 @@
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 from dataclasses import dataclass
 import logging
 
 import pyvisa
 from qcodes.parameters import Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
-from qcodes.dataset import experiments, initialise_or_create_database_at
-from textual.widget import Widget
 from utils.util import *
-from textual import events, on
+from textual import on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
-from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
-from textual.containers import Horizontal, HorizontalGroup, HorizontalScroll, Vertical, Grid, Container
-from textual.widgets import Collapsible, DataTable, Footer, Header, Pretty, Static, Switch, Tabs, Label, TabbedContent, TabPane, OptionList, Select, Input, Button, Placeholder, ListView, ListItem
+from textual.containers import Horizontal, Vertical, Grid, Container
+from textual.widgets import Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
 
 
 @dataclass
@@ -69,7 +66,6 @@ class InstrumentsScreen(Screen):
 
         option = event.option_list.get_option_at_index(event.option_index)
         instrument_address = option.prompt
-        print(instrument_address)
 
         try:
             self.connect_instrument(str(instrument_address))
@@ -86,14 +82,13 @@ class InstrumentsScreen(Screen):
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
         new_instrument = auto_connect_instrument(address=instrument_address)
         # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
-        print("auto_connected")
+
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
         new_connected = self.app.shared_state.connected_instruments.copy()
         new_connected.append(new_instrument)
         self.app.shared_state.connected_instruments = new_connected  # Trigger reactive update
         self.watch_connected_instruments(self.app.shared_state.connected_instruments)
-        print(self.app.shared_state.connected_instruments)
         
 
     def watch_connected_instruments(self, connected_instruments: list) -> None:
