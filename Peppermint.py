@@ -6,7 +6,7 @@ import pyvisa
 from qcodes.instrument import VisaInstrument
 from qcodes.parameters import Parameter
 from utils.util import *
-from textual import on
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.binding import Binding
@@ -151,6 +151,9 @@ class ParametersScreen(Screen):
         for key, p in selected_instrument.parameters.items():
             self.available_parameters.append(ListItem(Static(p.full_name)))
 
+    def action_set_parameter(self, event: events.Key) -> None: 
+        """Planned refactor to just use the event key ("r" or "w") to assign class and set/get"""
+        ...
 
     def action_set_parameter_read(self) -> None:
         """
@@ -180,7 +183,7 @@ class ParametersScreen(Screen):
         """
         Assign the parameter active write mode.
 
-        TODO: switching back-forth from read/write
+        TODO: switching back-forth from read/write, set experiment
         """
         if "write" in self.available_parameters.highlighted_child.classes:
             self.notify("Already reading parameter")
@@ -193,10 +196,11 @@ class ParametersScreen(Screen):
                 # these are he hoops I have to jump through to extract the text from the selected widget
                 new_parameter_name: str = selected_parameter.children[0].render()._renderable # type: ignore
             except: 
-                self.notify("someone broke the params list widget. it should be a static.")
+                self.notify("someone broke the params list widget. it should be a static widget.")
                 return 
 
             print(new_parameter_name)
+            p = Parameter(name=new_parameter_name, label="", unit="", )
             selected_parameter.add_class("write")
             self.app.shared_state.write_parameters.append(new_parameter_name)
 
