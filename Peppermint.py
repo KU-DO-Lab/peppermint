@@ -82,8 +82,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        new_instrument = auto_connect_instrument(address=instrument_address)
-        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        # new_instrument = auto_connect_instrument(address=instrument_address)
+        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -153,6 +153,10 @@ class ParametersScreen(Screen):
         self.available_parameters.clear()
         for key, p in selected_instrument.parameters.items():
             self.available_parameters.append(ListItem(Static(p.name)))
+        for name, submodule in selected_instrument.submodules.items():
+            if hasattr(submodule, 'parameters'):
+                for key, p in submodule.parameters.items():
+                    self.available_parameters.append(ListItem(Static(p.name)))
 
     def action_set_parameter_read(self) -> None:
         """Sets parameter to active read mode"""
@@ -353,7 +357,7 @@ class Peppermint(App):
     BINDINGS = [
         ("i", "push_screen('instrument_screen')", "Instruments"),
         ("p", "push_screen('parameter_screen')", "Parameters"),
-        ("t", "push_screen('temperature_screen')", "Parameters"),
+        ("t", "push_screen('temperature_screen')", "Temperature"),
         ("a", "push_screen('main_screen')", "Main Screen")
     ]
 
