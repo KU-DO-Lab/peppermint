@@ -24,13 +24,22 @@ class ParameterWidget(Widget):
             Pretty(self.param.get()),
             Horizontal(
                 Static("Live Update:     ", classes="label"), 
-                Switch(id="live_toggle", value=True),
+                Switch(id="live_toggle", value=False),
                 classes="container"
             ),
             Input(id="update_freq", placeholder="Update Frequency (hz)"),
             classes="parameter_entry",
             title=self.param.full_name,
         )
+
+    async def on_screen_suspend(self):
+        """When the screen is suspended pause everything"""
+        self.stop_updates()
+
+    async def on_screen_resume(self) -> None:
+        """restore previous state on screen resume"""
+        self.update_timer = self.set_interval(1.0, self.update_value)
+        self.restart_updates(self.update_timer)
 
     def on_switch_changed(self, event: Switch.Changed) -> None:
         if event.switch.value:
