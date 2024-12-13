@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 
 import pyvisa
-from qcodes.parameters import Parameter, ParameterBase
+from qcodes.parameters import GroupParameter, Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
 from rich.text import Text
 from utils.drivers import Lakeshore_336
@@ -82,8 +82,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        # new_instrument = auto_connect_instrument(address=instrument_address)
-        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        new_instrument = auto_connect_instrument(address=instrument_address)
+        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -152,11 +152,11 @@ class ParametersScreen(Screen):
 
         self.available_parameters.clear()
         for key, p in selected_instrument.parameters.items():
-            self.available_parameters.append(ListItem(Static(p.name)))
+            self.available_parameters.append(ListItem(Static(p.full_name)))
         for name, submodule in selected_instrument.submodules.items():
             if hasattr(submodule, 'parameters'):
                 for key, p in submodule.parameters.items():
-                    self.available_parameters.append(ListItem(Static(p.name)))
+                    self.available_parameters.append(ListItem(Static(p.full_name)))
 
     def action_set_parameter_read(self) -> None:
         """Sets parameter to active read mode"""
@@ -167,16 +167,47 @@ class ParametersScreen(Screen):
             return
 
         try:
-            param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+            full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
             instrument: Optional[VisaInstrument] = next(
                 inst for inst in self.app.shared_state.connected_instruments 
                 if inst.name == self.connected_instrument_list.value
             )
-            
-            if not instrument:
+
+            if instrument:
+                stripped_param_name: str = str(full_param_name)[len(instrument.name) + 1:]
+            else:
                 raise ValueError("No instrument selected")
+
+            # It's necessary to search submodules a majority of the time, so this loop iterates through the available 
+            # submodules, trying to find if one matches. Any parameter will be named as "submodule_parameter", 
+            # so this should work, at least for qcodes devices
+            submodule_name = None
+            for sub_name in instrument.submodules:
+                if stripped_param_name.startswith(f"{sub_name}_"):
+                    submodule_name = sub_name
+                    break
+
+            if submodule_name: 
+                doubly_stripped_param_name: str = str(stripped_param_name)[len(submodule_name) + 1:]
+                submodule = instrument.submodules[submodule_name]
+                param: GroupParameter | ParameterBase = submodule.parameters[doubly_stripped_param_name]
+                print(dir(param))
+                print(param.get)
+                print(param.gettable)
+                print(param.get_raw)
+                print(param.get_latest)
                 
-            param: ParameterBase = instrument.parameters[param_name]
+                # Verify the parameter exists but don't try to access its value yet
+                print(f"Parameter type: {type(param)}")
+                # print(f"Parameter group: {param.group}")
+                print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
+                print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
+
+                # trying to call .get on this parameter will fail-
+                # Store the parameter object without trying to get its value
+                # return
+            else:
+                param: GroupParameter | ParameterBase = instrument.parameters[stripped_param_name]
 
             if not param.gettable:
                 self.notify("parameter is not writeable!")
@@ -186,8 +217,8 @@ class ParametersScreen(Screen):
             self.app.shared_state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
             self.read_parameters.append(ListItem(ParameterWidget(param, readonly=True)))
 
-        except (AttributeError, IndexError):
-            self.notify("Invalid parameter widget structure")
+        # except (AttributeError, IndexError):
+        #     self.notify("Invalid parameter widget structure")
         except StopIteration:
             self.notify("No instrument selected")
         except Exception as e:

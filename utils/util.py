@@ -63,62 +63,6 @@ class ParameterWidget(Widget):
     def update_value(self):
         self.query_one(Pretty).update(self.param.get())
 
-
-# # stolen from Spearmint
-# def safe_set(p, value, last_try=False):
-#     """
-#     Alerts the user when a parameter can not be set to the chosen value.
-#
-#     Parameters
-#     ---------
-#     p:
-#         The parameter to be set.
-#     value:
-#         The desired value.
-#     last_try:
-#         Flag to stop attempting to set the value.
-#     """
-#
-#     ret = None
-#     try:
-#         ret = p.set(value)
-#     except Exception as e:
-#         if last_try is False:
-#             print(f"Couldn't set {p.name} to {value}. Trying again.", e)
-#             time.sleep(1)
-#             return safe_set(p, value, last_try=True)
-#         else:
-#             print(f"Still couldn't set {p.name} to {value}. Giving up.", e)
-#             raise ParameterException(f"Couldn't set {p.name} to {value}.", set=True)
-#     return ret
-#
-# # stolen from Spearmint
-# def safe_get(p, last_try=False):
-#     """
-#     Alerts the user when a parameter's value can not be obtained.
-#
-#     Parameters
-#     ---------
-#     p:
-#         The parameter to be measured.
-#     last_try:
-#         Flag to stop attempting to set the value.
-#     """
-#
-#     ret = None
-#     try:
-#         ret = p.get()
-#     except Exception as e:
-#         if last_try is False:
-#             print(f"Couldn't get {p.name}. Trying again.", e)
-#             time.sleep(1)
-#             return safe_get(p, last_try=True)
-#         else:
-#             print(f"Still couldn't get {p.name}. Giving up.", e)
-#             raise ParameterException(f'Could not get {p.name}.', set=False)
-#     return ret
-
-
 def update_option_list(option_list: OptionList, items: list):
     """Helper method to update an OptionList's contents."""
     option_list.clear_options()
