@@ -18,19 +18,20 @@ Switch {
     width: auto;
 }
 
-#writeParam {
-    
-}
+#writeParam { }
+
 #main-menu-grid {
     layout: grid;
     grid-size: 2;
     grid-columns: 1fr;
     grid-rows: 1fr;
 }
+
 #inst-list{
     height: 100%;
     background: $panel;
 }
+
 #dialog {
     grid-size: 2;
     grid-gutter: 1 2;
@@ -55,6 +56,11 @@ Switch {
     width: 1fr;
     content-align: center middle;
 }
+
+#short_container {
+    height: 25%;
+}
+
 
 .read {
     color: #00a400;

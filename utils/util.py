@@ -154,7 +154,8 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
 
     # If we need to test without access to the lab hardware, just create a dummy instrument
     if name == "dummy":
-        return Keithley2450("dummy_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
+        # return Keithley2450("dummy_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
+        return LakeshoreModel336("dummy_lakeshore2450", address="GPIB::2::INSTR", pyvisa_sim_file="lakeshore_model336.yaml")
 
     rm = pyvisa.ResourceManager()
     inst = rm.open_resource(address)

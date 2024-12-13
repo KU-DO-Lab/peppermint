@@ -6,13 +6,15 @@ import logging
 import pyvisa
 from qcodes.parameters import Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
+from rich.text import Text
+from utils.drivers import Lakeshore_336
 from utils.util import *
 from textual import on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
+from textual.widgets import DataTable, Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
 
 
 @dataclass
@@ -80,8 +82,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        # new_instrument = auto_connect_instrument(address=instrument_address)
-        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        new_instrument = auto_connect_instrument(address=instrument_address)
+        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -127,6 +129,17 @@ class ParametersScreen(Screen):
                 Label("Set Parameters"), self.write_parameters
             ))
         yield Footer()
+
+    async def on_screen_resume(self) -> None:
+        """Handle the ScreenResume event."""
+        # Perform some action when the screen is resumed
+        self.connected_instrument_list.clear()
+        self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
+        self.connected_instrument_list.set_options(self.instrument_options)
+        # for element in self.app.shared_state.connected_instruments:
+        #     self.connected_instrument_list.append()
+
+
 
     @on(Select.Changed)
     def handle_parameter_instrument_changed(self, event: Select.Changed) -> None:
@@ -222,14 +235,52 @@ class ParametersScreen(Screen):
 
 class TemperatureScreen(Screen):
     """TODO"""
-    BINDINGS = [] 
+    BINDINGS = [
+        ("s", "setpoint", "Adjust Setpoint"),
+    ] 
+
+    ROWS = [
+        ("Channel A:", "N/A"),
+        ("Channel B:", "N/A"),
+        ("Channel C:", "N/A"),
+        ("Channel D:", "N/A"),
+    ]
 
     def compose(self) -> ComposeResult:
+        instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
+        self.connected_instrument_list = Select[str](options=instrument_options)
+        self.status_table = Container(
+            Horizontal(Label("Channel A:    "), Label("", id="channel_A")),
+            Horizontal(Label("Channel B:    "), Label("", id="channel_B")),
+            Horizontal(Label("Channel C:    "), Label("", id="channel_C")),
+            Horizontal(Label("Channel D:    "), Label("", id="channel_D")),
+        )
+
+        # This mess should probably be rewritten by someone with a nonzero amount of css skill
         yield Header()
-        with TabbedContent():
-            with TabPane("Temperature", id="temperature_tab"):
-                yield Label()
+        yield Container(
+        Horizontal(
+            Horizontal(Static("Temperature Controller:     ", classes="label"), self.connected_instrument_list, classes="temp_controller_instrument"),
+            Vertical(Static("Status:", classes="label"), self.status_table, classes="temp_controller_status"),
+            Container(Placeholder(), classes="temp_controller_controls"),
+            classes="short_container"
+        ),
+        Container()
+        )
         yield Footer()
+
+    def on_mount(self):
+        connected_instruments = self.app.shared_state.connected_instruments # type: ignore
+
+        # automatically try to monitor a lakeshore if it is found, this could be made more robust if we had other instruments to monitor.
+        # i.e. we can then default to a TM620, etc.
+        if LakeshoreModel336 in [inst.__class__ for inst in connected_instruments]:
+            allowed_temperature_monitors = [inst for inst in connected_instruments if isinstance(connected_instruments, LakeshoreModel336)]
+            self.instrument_options: list[tuple[str,str]] = [(instrument.name, instrument.name) for instrument in allowed_temperature_monitors]
+            self.connected_instrument_list.clear()
+            for key, p in selected_instrument.parameters.items():
+                self.available_parameters.append(ListItem(Static(p.name)))
+            self.connected_instrument_list = Select[str](options=self.instrument_options)
 
 
 class Sweep1DScreen(Screen):
@@ -293,7 +344,6 @@ class MainScreen(Screen):
     def temp_button(self):
         self.app.push_screen("temperature_screen")
 
-
         
 class Peppermint(App):
     """A Textual app to manage instruments."""
@@ -310,6 +360,7 @@ class Peppermint(App):
     BINDINGS = [
         ("i", "push_screen('instrument_screen')", "Instruments"),
         ("p", "push_screen('parameter_screen')", "Parameters"),
+        ("t", "push_screen('temperature_screen')", "Parameters"),
         ("a", "push_screen('main_screen')", "Main Screen")
     ]
 
