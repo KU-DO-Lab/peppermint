@@ -80,8 +80,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        new_instrument = auto_connect_instrument(address=instrument_address)
-        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        # new_instrument = auto_connect_instrument(address=instrument_address)
+        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -171,11 +171,10 @@ class ParametersScreen(Screen):
             
             selected.add_class("read")
             self.app.shared_state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
-
             self.read_parameters.append(ListItem(ParameterWidget(param, readonly=True)))
 
-        # except (AttributeError, IndexError):
-        #     self.notify("Invalid parameter widget structure")
+        except (AttributeError, IndexError):
+            self.notify("Invalid parameter widget structure")
         except StopIteration:
             self.notify("No instrument selected")
         except Exception as e:
@@ -211,7 +210,7 @@ class ParametersScreen(Screen):
 
             selected.add_class("write")
             self.app.shared_state.write_parameters.append(param) # in case the parameter needs to be accessed in a database
-            self.write_parameters.append(ListItem(Label(param.full_name)))
+            self.write_parameters.append(ListItem(ParameterWidget(param, readonly=False)))
 
         except (AttributeError, IndexError):
             self.notify("Invalid parameter widget structure")
@@ -219,14 +218,8 @@ class ParametersScreen(Screen):
             self.notify("No instrument selected")
         except Exception as e:
             self.notify(f"Error: {str(e)}")
-
-
-
-    # def append_readwrite_parameters(self, list_to_update) -> None: 
-    #     """for updating self.read_parameters and self.write_parameters"""
-
-
         
+
 class TemperatureScreen(Screen):
     """TODO"""
     BINDINGS = [] 
@@ -280,14 +273,27 @@ class MainScreen(Screen):
         with Container(id="main-menu-grid"):
             with Container(id="left-pane"):
                 yield Button("Instruments", id="isnt_button")
+                yield Button("Parameters", id="param_button")
+                yield Button("Temperature", id="temp_button")
                 yield Button("Experiments", id="exp_button")
                 yield Button("Settings", id="settings_button")
             with Container(id="inst-list"):
                 yield Label("Connected Instruments")
                 yield ListView(*self.app.shared_state.connected_instruments)
+
     @on(Button.Pressed, "#isnt_button")
     def inst_button(self):
         self.app.push_screen("instrument_screen")
+
+    @on(Button.Pressed, "#param_button")
+    def param_button(self):
+        self.app.push_screen("parameter_screen")
+
+    @on(Button.Pressed, "#isnt_button")
+    def temp_button(self):
+        self.app.push_screen("temperature_screen")
+
+
         
 class Peppermint(App):
     """A Textual app to manage instruments."""
@@ -310,6 +316,7 @@ class Peppermint(App):
     SCREENS = { 
         "instrument_screen": InstrumentsScreen, #type: ignore
         "parameter_screen": ParametersScreen, #type: ignore
+        "temperature_screen": TemperatureScreen, #type: ignore
         "manual_connection_dialog": ManualConnectionDialog, #type: ignore
         "main_screen": MainScreen
     }
