@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Generic, Optional
 from dataclasses import dataclass
 import logging
 
@@ -136,10 +136,6 @@ class ParametersScreen(Screen):
         self.connected_instrument_list.clear()
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
         self.connected_instrument_list.set_options(self.instrument_options)
-        # for element in self.app.shared_state.connected_instruments:
-        #     self.connected_instrument_list.append()
-
-
 
     @on(Select.Changed)
     def handle_parameter_instrument_changed(self, event: Select.Changed) -> None:
@@ -234,6 +230,7 @@ class ParametersScreen(Screen):
         
 
 class TemperatureScreen(Screen):
+
     """TODO"""
     BINDINGS = [
         ("s", "setpoint", "Adjust Setpoint"),
@@ -247,8 +244,11 @@ class TemperatureScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
-        self.connected_instrument_list = Select[str](options=instrument_options)
+        allowed_monitor_types = (LakeshoreModel336)
+        self.allowed_temperature_monitors = [inst for inst in self.app.shared_state.connected_instruments if isinstance(inst, allowed_monitor_types)] # type: ignore
+        self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
+        self.temperature_monitors_select = Select[str](self.instrument_options)
+
         self.status_table = Container(
             Horizontal(Label("Channel A:    "), Label("", id="channel_A")),
             Horizontal(Label("Channel B:    "), Label("", id="channel_B")),
@@ -260,7 +260,7 @@ class TemperatureScreen(Screen):
         yield Header()
         yield Container(
         Horizontal(
-            Horizontal(Static("Temperature Controller:     ", classes="label"), self.connected_instrument_list, classes="temp_controller_instrument"),
+            Horizontal(Static("Temperature Controller:     ", classes="label"), self.temperature_monitors_select, classes="temp_controller_instrument"),
             Vertical(Static("Status:", classes="label"), self.status_table, classes="temp_controller_status"),
             Container(Placeholder(), classes="temp_controller_controls"),
             classes="short_container"
@@ -269,19 +269,12 @@ class TemperatureScreen(Screen):
         )
         yield Footer()
 
-    def on_mount(self):
-        connected_instruments = self.app.shared_state.connected_instruments # type: ignore
-
-        # automatically try to monitor a lakeshore if it is found, this could be made more robust if we had other instruments to monitor.
-        # i.e. we can then default to a TM620, etc.
-        if LakeshoreModel336 in [inst.__class__ for inst in connected_instruments]:
-            allowed_temperature_monitors = [inst for inst in connected_instruments if isinstance(connected_instruments, LakeshoreModel336)]
-            self.instrument_options: list[tuple[str,str]] = [(instrument.name, instrument.name) for instrument in allowed_temperature_monitors]
-            self.connected_instrument_list.clear()
-            for key, p in selected_instrument.parameters.items():
-                self.available_parameters.append(ListItem(Static(p.name)))
-            self.connected_instrument_list = Select[str](options=self.instrument_options)
-
+    async def on_screen_resume(self) -> None:
+        """Handle the ScreenResume event."""
+        # Perform some action when the screen is resumed
+        self.temperature_monitors_select.clear()
+        self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
+        self.temperature_monitors_select.set_options(self.instrument_options)
 
 class Sweep1DScreen(Screen):
     """TODO"""
