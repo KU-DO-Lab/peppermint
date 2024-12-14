@@ -82,8 +82,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        # new_instrument = auto_connect_instrument(address=instrument_address)
-        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        new_instrument = auto_connect_instrument(address=instrument_address)
+        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -367,7 +367,7 @@ class TemperatureScreen(Screen):
         self.start_temperature_polling()
 
     def get_temperatures(self) -> None:
-        print("test")
+        # print("test")
         channel_widgets = {
             'A': self.chA_temperature,
             'B': self.chB_temperature,
