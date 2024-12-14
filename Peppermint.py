@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 
 import pyvisa
+from qcodes.dataset import Measurement, initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import GroupParameter, Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
 from rich.text import Text
@@ -82,8 +83,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        new_instrument = auto_connect_instrument(address=instrument_address)
-        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        # new_instrument = auto_connect_instrument(address=instrument_address)
+        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -298,6 +299,15 @@ class TemperatureScreen(Screen):
         self.polling_frequency = 1.0
         self.update_timer = None
 
+        # Initialize database and experiment
+        self.experiment = load_or_create_experiment(experiment_name="Temperature Monitoring", sample_name="Sample123")
+        self.measurement = Measurement(self.experiment)
+
+        # Dynamically register parameters based on the temperature monitor
+        for param in self.app.shared_state.read_parameters:
+            if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
+                self.measurement.register_parameter(param, paramtype="numeric")
+
 
     def compose(self) -> ComposeResult:
         allowed_monitor_types = (LakeshoreModel336)
@@ -460,12 +470,14 @@ class MainScreen(Screen):
 class Peppermint(App):
     """A Textual app to manage instruments."""
 
-    shared_state = SharedState()
-    shared_state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
-    shared_state.connected_instruments = []
-    shared_state.write_parameters = []
-    shared_state.read_parameters = []
-    shared_state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
+    def __init__(self):
+        super().__init__()
+        self.shared_state = SharedState()
+        self.shared_state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
+        self.shared_state.connected_instruments = []
+        self.shared_state.write_parameters = []
+        self.shared_state.read_parameters = []
+        self.shared_state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
 
     CSS_PATH = "Peppermint.css"
 
@@ -486,7 +498,7 @@ class Peppermint(App):
     
     def on_mount(self) -> None:
         self.push_screen('main_screen')
-        # initialise_or_create_database_at(self.shared_state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
+        initialise_or_create_database_at(self.shared_state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
 
 if __name__ == "__main__":
     app = Peppermint()
