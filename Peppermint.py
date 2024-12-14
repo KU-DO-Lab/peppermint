@@ -293,6 +293,11 @@ class TemperatureScreen(Screen):
     BINDINGS = [
         ("s", "setpoint", "Adjust Setpoint"),
     ] 
+    def __init__(self):
+        super().__init__()
+        self.polling_frequency = 1.0
+        self.update_timer = None
+
 
     def compose(self) -> ComposeResult:
         allowed_monitor_types = (LakeshoreModel336)
@@ -326,27 +331,24 @@ class TemperatureScreen(Screen):
         yield Footer()
 
     async def on_screen_resume(self) -> None:
-        """Handle the ScreenResume event."""
+        """
+        Handle the ScreenResume event.
+
+        Whenever the temperature screen is opened, we need to make sure every temperature monitor parameter is running.
+        """
 
         if len(self.allowed_temperature_monitors) <= 0: 
             self.notify("please connect the Lakeshore 336!")
             return
-
-        # if len(self.app.shared_state.read_parameters) <= 0:
-        #     self.notify()
 
         # Perform some action when the screen is resumed
         self.temperature_monitors_select.clear()
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select.set_options(self.instrument_options)
 
-        # print(dir(self.app.shared_state.read_parameters[0]))
-        # print([instr.name_parts for instr in self.app.shared_state.read_parameters])
-
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
         # for a lakeshore 336, it has channels/submodules ABCD. this will differ with other controllers
         required_submodules = {'A', 'B', 'C', 'D'}
-
         parameters: list[list[str]] | None = [param.name_parts for param in self.app.shared_state.read_parameters]
 
         # Extract the labels for "temperature" parameters
@@ -361,7 +363,10 @@ class TemperatureScreen(Screen):
 
         print(self.app.shared_state.read_parameters)
         
-        # Create a dictionary to map channel labels to their corresponding widget updates
+        self.get_temperatures()
+        self.start_temperature_polling()
+
+    def get_temperatures(self) -> None:
         channel_widgets = {
             'A': self.chA_temperature,
             'B': self.chB_temperature,
@@ -369,7 +374,6 @@ class TemperatureScreen(Screen):
             'D': self.chD_temperature
         }
 
-        # Iterate over the list of parameter objects
         for param in self.app.shared_state.read_parameters:
             # Ensure the parameter has name parts and the last part is "temperature"
             if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
@@ -382,6 +386,13 @@ class TemperatureScreen(Screen):
                     value = param.get()
                     channel_widgets[channel_label].update(str(value))
 
+    def start_temperature_polling(self) -> None:
+        self.stop_temperature_polling()
+        self.update_timer = self.set_interval(1/self.polling_frequency, self.get_temperatures)
+
+    def stop_temperature_polling(self) -> None:
+        if self.update_timer:
+            self.update_timer.stop()
 
 class Sweep1DScreen(Screen):
     """TODO"""
