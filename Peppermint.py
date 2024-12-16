@@ -52,8 +52,8 @@ class InstrumentsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        self.detected_instrument_list: OptionList = OptionList(*self.app.shared_state.detected_instruments)
-        self.connected_instrument_list: OptionList = OptionList(*self.app.shared_state.connected_instruments)  # Start empty
+        self.detected_instrument_list: OptionList = OptionList(*self.app.state.detected_instruments)
+        self.connected_instrument_list: OptionList = OptionList(*self.app.state.connected_instruments)  # Start empty
         yield Horizontal(
             Vertical(Label("Detected Instruments"), self.detected_instrument_list),
             Vertical(Label("Connected Instruments"), self.connected_instrument_list),
@@ -88,10 +88,10 @@ class InstrumentsScreen(Screen):
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
-        new_connected = self.app.shared_state.connected_instruments.copy()
+        new_connected = self.app.state.connected_instruments.copy()
         new_connected.append(new_instrument)
-        self.app.shared_state.connected_instruments = new_connected  # Trigger reactive update
-        self.watch_connected_instruments(self.app.shared_state.connected_instruments)
+        self.app.state.connected_instruments = new_connected  # Trigger reactive update
+        self.watch_connected_instruments(self.app.state.connected_instruments)
         
 
     def watch_connected_instruments(self, connected_instruments: list) -> None:
@@ -112,7 +112,7 @@ class ParametersScreen(Screen):
 
     def compose(self) -> ComposeResult: 
         yield Header()
-        instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
+        instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.state.connected_instruments]
         self.connected_instrument_list = Select[str](options=instrument_options)
         self.available_parameters: ListView = ListView()
         self.read_parameters: ListView = ListView()
@@ -135,7 +135,7 @@ class ParametersScreen(Screen):
         """Handle the ScreenResume event."""
         # Perform some action when the screen is resumed
         self.connected_instrument_list.clear()
-        self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.shared_state.connected_instruments]
+        self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.app.state.connected_instruments]
         self.connected_instrument_list.set_options(self.instrument_options)
 
     @on(Select.Changed)
@@ -144,7 +144,7 @@ class ParametersScreen(Screen):
 
         # Grab the actual instrument object from the name of the instrument in the select menu
         selected_instrument: Optional[VisaInstrument] = next(
-            (inst for inst in self.app.shared_state.connected_instruments if inst.name == self.connected_instrument_list.value),
+            (inst for inst in self.app.state.connected_instruments if inst.name == self.connected_instrument_list.value),
             None  # If for whatever reason an instrument can't be found this is set to none
         )
 
@@ -170,7 +170,7 @@ class ParametersScreen(Screen):
         try:
             full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
             instrument: Optional[VisaInstrument] = next(
-                inst for inst in self.app.shared_state.connected_instruments 
+                inst for inst in self.app.state.connected_instruments 
                 if inst.name == self.connected_instrument_list.value
             )
 
@@ -211,7 +211,7 @@ class ParametersScreen(Screen):
                 return
             
             selected.add_class("read")
-            self.app.shared_state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
+            self.app.state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
             self.read_parameters.append(ListItem(ParameterWidget(param, readonly=True)))
 
         except (AttributeError, IndexError):
@@ -236,7 +236,7 @@ class ParametersScreen(Screen):
         try:
             full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
             instrument: Optional[VisaInstrument] = next(
-                inst for inst in self.app.shared_state.connected_instruments 
+                inst for inst in self.app.state.connected_instruments 
                 if inst.name == self.connected_instrument_list.value
             )
 
@@ -277,7 +277,7 @@ class ParametersScreen(Screen):
                 return 
 
             selected.add_class("write")
-            self.app.shared_state.write_parameters.append(param) # in case the parameter needs to be accessed in a database
+            self.app.state.write_parameters.append(param) # in case the parameter needs to be accessed in a database
             self.write_parameters.append(ListItem(ParameterWidget(param, readonly=False)))
 
         except (AttributeError, IndexError):
@@ -303,15 +303,15 @@ class TemperatureScreen(Screen):
         self.experiment = load_or_create_experiment(experiment_name="Temperature Monitoring", sample_name="Sample123")
         self.measurement = Measurement(self.experiment)
 
-        # Dynamically register parameters based on the temperature monitor
-        for param in self.app.shared_state.read_parameters:
+        # Register parameters based on the temperature controller channels
+        for param in self.app.state.read_parameters:
             if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
                 self.measurement.register_parameter(param, paramtype="numeric")
 
 
     def compose(self) -> ComposeResult:
         allowed_monitor_types = (LakeshoreModel336)
-        self.allowed_temperature_monitors = [inst for inst in self.app.shared_state.connected_instruments if isinstance(inst, allowed_monitor_types)] # type: ignore
+        self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, allowed_monitor_types)] # type: ignore
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select = Select[str](self.instrument_options)
 
@@ -359,7 +359,7 @@ class TemperatureScreen(Screen):
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
         # for a lakeshore 336, it has channels/submodules ABCD. this will differ with other controllers
         required_submodules = {'A', 'B', 'C', 'D'}
-        parameters: list[list[str]] | None = [param.name_parts for param in self.app.shared_state.read_parameters]
+        parameters: list[list[str]] | None = [param.name_parts for param in self.app.state.read_parameters]
 
         # Extract the labels for "temperature" parameters
         existing_labels = { param[1] for param in parameters if len(param) > 2 and param[-1] == "temperature" }
@@ -369,9 +369,9 @@ class TemperatureScreen(Screen):
         for label in missing_labels:
             submodule = self.allowed_temperature_monitors[0].submodules[label]
             param: GroupParameter | ParameterBase = submodule.parameters['temperature']
-            self.app.shared_state.read_parameters.append(param)
+            self.app.state.read_parameters.append(param)
 
-        print(self.app.shared_state.read_parameters)
+        print(self.app.state.read_parameters)
         
         self.get_temperatures()
         self.start_temperature_polling()
@@ -385,7 +385,7 @@ class TemperatureScreen(Screen):
             'D': self.chD_temperature
         }
 
-        for param in self.app.shared_state.read_parameters:
+        for param in self.app.state.read_parameters:
             # Ensure the parameter has name parts and the last part is "temperature"
             if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
                 # Extract the channel label (e.g., 'A', 'B', 'C', 'D')
@@ -404,6 +404,12 @@ class TemperatureScreen(Screen):
     def stop_temperature_polling(self) -> None:
         if self.update_timer:
             self.update_timer.stop()
+
+    def initialize_plot(self) -> None:
+        """Open a matplotlib window with the plot (data displayed comes from the "experiment" database file)"""
+        self.notify(f"attempting to open database at {self.app.state.database_path}")
+        ...
+
 
 class Sweep1DScreen(Screen):
     """TODO"""
@@ -452,7 +458,7 @@ class MainScreen(Screen):
                 yield Button("Settings", id="settings_button")
             with Container(id="inst-list"):
                 yield Label("Connected Instruments")
-                yield ListView(*self.app.shared_state.connected_instruments)
+                yield ListView(*self.app.state.connected_instruments)
 
     @on(Button.Pressed, "#isnt_button")
     def inst_button(self):
@@ -472,12 +478,12 @@ class Peppermint(App):
 
     def __init__(self):
         super().__init__()
-        self.shared_state = SharedState()
-        self.shared_state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
-        self.shared_state.connected_instruments = []
-        self.shared_state.write_parameters = []
-        self.shared_state.read_parameters = []
-        self.shared_state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
+        self.state = SharedState()
+        self.state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
+        self.state.connected_instruments = []
+        self.state.write_parameters = []
+        self.state.read_parameters = []
+        self.state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
 
     CSS_PATH = "Peppermint.css"
 
@@ -498,7 +504,7 @@ class Peppermint(App):
     
     def on_mount(self) -> None:
         self.push_screen('main_screen')
-        initialise_or_create_database_at(self.shared_state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
+        initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
 
 if __name__ == "__main__":
     app = Peppermint()

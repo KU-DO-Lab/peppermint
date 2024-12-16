@@ -11,7 +11,6 @@ from utils.drivers.Keithley_2450 import Keithley2450
 from textual.reactive import reactive
 from typing import Optional
 
-
 class ParameterWidget(Widget):
     def __init__(self, param, readonly):
         super().__init__()
