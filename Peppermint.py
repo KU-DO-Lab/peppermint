@@ -18,7 +18,7 @@ from textual.widgets import Footer, Header, Static, Label, TabbedContent, TabPan
 import time
 import matplotlib
 import matplotlib.pyplot as plt
-matplotlib.use("GTK3Agg")
+# matplotlib.use("GTK3Agg")
 
 
 @dataclass
@@ -316,12 +316,12 @@ class TemperatureScreen(Screen):
         self.channel_widgets = {
             'A': self.chA_temperature,
             'B': self.chB_temperature,
-            'C': self.chC_temperature,
-            'D': self.chD_temperature
+            # 'C': self.chC_temperature,
+            # 'D': self.chD_temperature
         }
         
         # Initialize experiments for each channel
-        for channel in ['A', 'B', 'C', 'D']:
+        for channel in list(self.channel_widgets.keys()): # [A,B,C,D]
             exp_name = f"Temperature_Channel_{channel}"
             self.experiments[channel] = load_or_create_experiment(
                 experiment_name=exp_name,
@@ -413,7 +413,7 @@ class TemperatureScreen(Screen):
 
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
         # for a lakeshore 336, it has channels/submodules ABCD. this will differ with other controllers
-        required_submodules = {'A', 'B', 'C', 'D'}
+        required_submodules = set(self.channel_widgets.keys()) # [A,B,C,D]
         parameters: list[list[str]] | None = [param.name_parts for param in self.app.state.read_parameters]
 
         # Extract the labels for "temperature" parameters
@@ -450,7 +450,7 @@ class TemperatureScreen(Screen):
         self.plot_lines = {}
 
         # Initialize lines for each channel in the plot
-        for channel in ['A', 'B', 'C', 'D']:
+        for channel in list(self.channel_widgets.keys()): # [A,B,C,D]
             line, = self.ax.plot([], [], label=f"Channel {channel}")
             self.plot_lines[channel] = line
 
