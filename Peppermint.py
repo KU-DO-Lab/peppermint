@@ -1,5 +1,5 @@
 import os
-from typing import Generic, Optional
+from typing import Any, Dict, Optional
 from dataclasses import dataclass
 import logging
 
@@ -7,15 +7,18 @@ import pyvisa
 from qcodes.dataset import Measurement, initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import GroupParameter, Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
-from rich.text import Text
-from utils.drivers import Lakeshore_336
 from utils.util import *
 from textual import on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import DataTable, Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
+from textual.widgets import Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
+
+import time
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.use("GTK3Agg")
 
 
 @dataclass
@@ -83,8 +86,8 @@ class InstrumentsScreen(Screen):
         #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
 
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        # new_instrument = auto_connect_instrument(address=instrument_address)
-        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        new_instrument = auto_connect_instrument(address=instrument_address)
+        # new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -286,39 +289,93 @@ class ParametersScreen(Screen):
             self.notify("No instrument selected")
         except Exception as e:
             self.notify(f"Error: {str(e)}")
-        
 
 class TemperatureScreen(Screen):
-    """See the trello board for info."""
+    """The screen containing information related to the temperature controllers."""
 
     BINDINGS = [
+        ("u", "initialize_plot", "Open Plot"),
         ("s", "setpoint", "Adjust Setpoint"),
     ] 
+
     def __init__(self):
         super().__init__()
         self.polling_frequency = 1.0
         self.update_timer = None
+        
+        self.experiments = {}
+        self.measurements: Dict[str, Measurement] = {}
+        self.datasavers: Dict[str, Any] = {}
+        
+        self.chA_temperature = Static("N/A", id="channel_A")
+        self.chC_temperature = Static("N/A", id="channel_C")
+        self.chB_temperature = Static("N/A", id="channel_B")
+        self.chD_temperature = Static("N/A", id="channel_D")
 
-        # Initialize database and experiment
-        self.experiment = load_or_create_experiment(experiment_name="Temperature Monitoring", sample_name="Sample123")
-        self.measurement = Measurement(self.experiment)
+        # Channel widget mappings
+        self.channel_widgets = {
+            'A': self.chA_temperature,
+            'B': self.chB_temperature,
+            'C': self.chC_temperature,
+            'D': self.chD_temperature
+        }
+        
+        # Initialize experiments for each channel
+        for channel in ['A', 'B', 'C', 'D']:
+            exp_name = f"Temperature_Channel_{channel}"
+            self.experiments[channel] = load_or_create_experiment(
+                experiment_name=exp_name,
+                sample_name="Lakeshore Auto Monitor"
+            )
 
-        # Register parameters based on the temperature controller channels
+    def initialize_measurements(self) -> None:
+        """Initialize separate measurements for each channel"""
         for param in self.app.state.read_parameters:
-            if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
-                self.measurement.register_parameter(param, paramtype="numeric")
+            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
+                continue
+                
+            channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
+            
+            # Create new measurement for this channel
+            measurement = Measurement(self.experiments[channel])
+            measurement.register_parameter(param)
+            
+            # Store measurement and create a new run (datasaver)
+            # each channel has its own datasaver, I could not get it to operate well pushing everything to one.
+            self.measurements[channel] = measurement
+            self.datasavers[channel] = measurement.run().__enter__()
 
+    def get_temperatures(self) -> None:
+        """Get and record temperatures for each channel"""
+        for param in self.app.state.read_parameters:
+            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
+                continue
+                
+            channel = param.name_parts[1] # Extract channel label (A, B, C, D)            
 
+            # Update widget
+            if channel in self.channel_widgets:
+                value = param.get()
+                self.channel_widgets[channel].update(str(value))
+                
+                # Record data for this channel
+                # Saved to the QCoDeS run which gets started when this screen is initialized.
+                if channel in self.datasavers and self.datasavers[channel]:
+                    print(channel, param, value)
+                    self.datasavers[channel].add_result( (param, value) )
+
+    def cleanup(self) -> None:
+        """Clean up the datasavers when done"""
+        for datasaver in self.datasavers.values():
+            if datasaver:
+                datasaver.__exit__(None, None, None)
+        
     def compose(self) -> ComposeResult:
+        """Define all widgets for this screen."""
         allowed_monitor_types = (LakeshoreModel336)
         self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, allowed_monitor_types)] # type: ignore
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select = Select[str](self.instrument_options)
-
-        self.chA_temperature = Static("N/A", id="channel_A")
-        self.chB_temperature = Static("N/A", id="channel_B")
-        self.chC_temperature = Static("N/A", id="channel_C")
-        self.chD_temperature = Static("N/A", id="channel_D")
 
         self.status_table = Container(
             Horizontal(Label("Channel A:    "), self.chA_temperature),
@@ -341,17 +398,15 @@ class TemperatureScreen(Screen):
         yield Footer()
 
     async def on_screen_resume(self) -> None:
-        """
-        Handle the ScreenResume event.
-
-        Whenever the temperature screen is opened, we need to make sure every temperature monitor parameter is running.
+        """ 
+        Handle the ScreenResume event. 
+        Whenever the temperature screen is opened, we need to make sure every temperature monitor parameter is running. 
         """
 
         if len(self.allowed_temperature_monitors) <= 0: 
             self.notify("please connect the Lakeshore 336!")
             return
 
-        # Perform some action when the screen is resumed
         self.temperature_monitors_select.clear()
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select.set_options(self.instrument_options)
@@ -365,50 +420,76 @@ class TemperatureScreen(Screen):
         existing_labels = { param[1] for param in parameters if len(param) > 2 and param[-1] == "temperature" }
         missing_labels = required_submodules - existing_labels
 
-        # things could go bad here if the lakeshore is not the only 
         for label in missing_labels:
             submodule = self.allowed_temperature_monitors[0].submodules[label]
             param: GroupParameter | ParameterBase = submodule.parameters['temperature']
             self.app.state.read_parameters.append(param)
-
-        print(self.app.state.read_parameters)
         
+        self.initialize_measurements()
         self.get_temperatures()
         self.start_temperature_polling()
-
-    def get_temperatures(self) -> None:
-        # print("test")
-        channel_widgets = {
-            'A': self.chA_temperature,
-            'B': self.chB_temperature,
-            'C': self.chC_temperature,
-            'D': self.chD_temperature
-        }
-
-        for param in self.app.state.read_parameters:
-            # Ensure the parameter has name parts and the last part is "temperature"
-            if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
-                # Extract the channel label (e.g., 'A', 'B', 'C', 'D')
-                channel_label = param.name_parts[1]
-
-                # Check if the channel label exists in the channel_widgets dictionary
-                if channel_label in channel_widgets:
-                    # Get the value from the parameter and update the corresponding widget
-                    value = param.get()
-                    channel_widgets[channel_label].update(str(value))
 
     def start_temperature_polling(self) -> None:
         self.stop_temperature_polling()
         self.update_timer = self.set_interval(1/self.polling_frequency, self.get_temperatures)
 
     def stop_temperature_polling(self) -> None:
+        """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
         if self.update_timer:
             self.update_timer.stop()
 
-    def initialize_plot(self) -> None:
-        """Open a matplotlib window with the plot (data displayed comes from the "experiment" database file)"""
-        self.notify(f"attempting to open database at {self.app.state.database_path}")
-        ...
+    def action_initialize_plot(self) -> None:
+        """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
+        self.fig, self.ax = plt.subplots()
+        self.ax.set_title("Channel Temperatures")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Temperature (K)")
+
+        # Store time and temperature data for each channel
+        self.plot_data = {channel: {"time": [], "temperature": []} for channel in ['A', 'B', 'C', 'D']}
+        self.plot_lines = {}
+
+        # Initialize lines for each channel in the plot
+        for channel in ['A', 'B', 'C', 'D']:
+            line, = self.ax.plot([], [], label=f"Channel {channel}")
+            self.plot_lines[channel] = line
+
+        self.ax.legend()
+        plt.show(block=False)
+
+        self.start_plot_update()
+
+    def start_plot_update(self) -> None:
+        """Start polling data and updating the plot."""
+        self.plot_start_time = time.time()
+        self.update_timer = self.set_interval(1 / self.polling_frequency, self.update_plot)
+
+    def update_plot(self) -> None:
+        """Poll data, update the Matplotlib plot, and refresh it."""
+        current_time = time.time() - self.plot_start_time
+
+        for param in self.app.state.read_parameters:
+            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
+                continue
+
+            channel = param.name_parts[1]
+            value = param.get()
+
+            # Update stored data
+            self.plot_data[channel]["time"].append(current_time)
+            self.plot_data[channel]["temperature"].append(value)
+
+            # Update plot line data
+            self.plot_lines[channel].set_xdata(self.plot_data[channel]["time"])
+            self.plot_lines[channel].set_ydata(self.plot_data[channel]["temperature"])
+
+        # Adjust axes limits dynamically
+        self.ax.relim()
+        self.ax.autoscale_view()
+
+        # Redraw the plot
+        self.fig.canvas.flush_events()
+        self.fig.canvas.draw()
 
 
 class Sweep1DScreen(Screen):
