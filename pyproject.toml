@@ -7,4 +7,5 @@ dependencies = [
     "PyVISA-sim==0.6.0",
     "textual==1.0.0",
     "matplotlib==3.10.0",
+    "argparse==1.4.0"
 ]

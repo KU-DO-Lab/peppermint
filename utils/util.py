@@ -18,65 +18,64 @@ class ParameterWidget(Widget):
         self.update_timer = None
 
     def compose(self) -> ComposeResult:
-        yield Pretty(self.param.get())
-        # yield Collapsible(
-        #     Pretty(self.param.get()),
-        #     Horizontal(
-        #         Static("Live Update:     ", classes="label"), 
-        #         Switch(id="live_toggle", value=False),
-        #         classes="container"
-        #     ),
-        #     Input(id="update_freq", placeholder="Update Frequency (hz)"),
-        #     classes="parameter_entry",
-        #     title=self.param.full_name,
-        # )
-        #
-#     async def on_screen_suspend(self):
-#         """When the screen is suspended pause everything"""
-#         self.stop_updates()
-#
-#     async def on_screen_resume(self) -> None:
-#         """restore previous state on screen resume"""
-#         self.update_timer = self.set_interval(1.0, self.update_value)
-#         self.restart_updates(self.update_timer)
-#
-#     def on_switch_changed(self, event: Switch.Changed) -> None:
-#         if event.switch.value:
-#             self.start_updates()
-#         else:
-#             self.stop_updates()
-#
-#     def on_input_changed(self, event: Input.Changed) -> None:
-#         if event.input.value:
-#             try:
-#                 freq = float(event.input.value)
-#                 self.restart_updates(freq)
-#             except ValueError:
-#                 pass
-#
-#     def on_mount(self) -> None:
-#         self.start_updates()
-#
-#     def start_updates(self, freq=1.0):
-#         self.stop_updates()
-#         self.update_timer = self.set_interval(1/freq, self.update_value)
-#
-#     def stop_updates(self):
-#         if self.update_timer:
-#             self.update_timer.stop()
-#
-#     def restart_updates(self, freq):
-#         self.start_updates(freq)
-#
-#     def update_value(self):
-#         self.query_one(Pretty).update(self.param.get())
-#
-# def update_option_list(option_list: OptionList, items: list):
-#     """Helper method to update an OptionList's contents."""
-#     option_list.clear_options()
-#     for item in items:
-#         option_list.add_option(item)
-#
+        yield Collapsible(
+            Pretty(self.param.get()),
+            Horizontal(
+                Static("Live Update:     ", classes="label"), 
+                Switch(id="live_toggle", value=False),
+                classes="container"
+            ),
+            Input(id="update_freq", placeholder="Update Frequency (hz)"),
+            classes="parameter_entry",
+            title=self.param.full_name,
+        )
+
+    async def on_screen_suspend(self):
+        """When the screen is suspended pause everything"""
+        self.stop_updates()
+
+    async def on_screen_resume(self) -> None:
+        """restore previous state on screen resume"""
+        self.update_timer = self.set_interval(1.0, self.update_value)
+        self.restart_updates(self.update_timer)
+
+    def on_switch_changed(self, event: Switch.Changed) -> None:
+        if event.switch.value:
+            self.start_updates()
+        else:
+            self.stop_updates()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.value:
+            try:
+                freq = float(event.input.value)
+                self.restart_updates(freq)
+            except ValueError:
+                pass
+
+    def on_mount(self) -> None:
+        self.start_updates()
+
+    def start_updates(self, freq=1.0):
+        self.stop_updates()
+        self.update_timer = self.set_interval(1/freq, self.update_value)
+
+    def stop_updates(self):
+        if self.update_timer:
+            self.update_timer.stop()
+
+    def restart_updates(self, freq):
+        self.start_updates(freq)
+
+    def update_value(self):
+        self.query_one(Pretty).update(self.param.get())
+
+def update_option_list(option_list: OptionList, items: list):
+    """Helper method to update an OptionList's contents."""
+    option_list.clear_options()
+    for item in items:
+        option_list.add_option(item)
+
 def update_select(select_list: Select, items: list):
     """Helper method to update an Select's contents."""
     select_list.set_options(
@@ -105,9 +104,10 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     """
 
     # If we need to test without access to the lab hardware, just create a dummy instrument
-    if name == "dummy":
-        # return Keithley2450("dummy_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
-        return LakeshoreModel336("dummy_lakeshore2450", address="GPIB::2::INSTR", pyvisa_sim_file="lakeshore_model336.yaml")
+    if name == "simulated_lakeshore":
+        return LakeshoreModel336("simulated_lakeshore336", address="GPIB::2::INSTR", pyvisa_sim_file="lakeshore_model336.yaml")
+    elif name == "simulated_keithley":
+        return Keithley2450("simulated_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
 
     rm = pyvisa.ResourceManager()
     inst = rm.open_resource(address)
@@ -115,7 +115,6 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     
     try:
         IDN = inst.query("*IDN?")
-        print(IDN)
         inst.close()
     except Exception as e:
         # We need this to fail otherwise the app will incorrectly add the instrument to the list of available instruments. 
@@ -133,15 +132,3 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
         case "4G":
             ...
     return new_dev
-
-def list_avail_instrument_params(instrument: VisaInstrument) -> None:
-    """
-    Lists available parameters for the instrument passed.
-    """
-    for key, p in instrument.parameters.items():
-        print(p.full_name)
-    for name, submodule in instrument.submodules.items():
-        if hasattr(submodule, 'parameters'):
-            for key, p in submodule.parameters.items():
-                ...
- 

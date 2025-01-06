@@ -1,24 +1,22 @@
 import os
+import logging
+import pyvisa
+import time
+import matplotlib.pyplot as plt
+import argparse
+
+from utils.util import *
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
-import logging
-
-import pyvisa
 from qcodes.dataset import Measurement, initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import GroupParameter, Parameter, ParameterBase
 from qcodes.instrument import VisaInstrument
-from utils.util import *
 from textual import on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
 from textual.widgets import Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
-
-import time
-import matplotlib
-import matplotlib.pyplot as plt
-# matplotlib.use("GTK3Agg")
 
 
 @dataclass
@@ -83,11 +81,11 @@ class InstrumentsScreen(Screen):
     def connect_instrument(self, instrument_address: str) -> None:
         """Connect to an instrument and update the connected instruments list. """
         # TODO: need to prompt for an instrument name here
-        #       we can forcibly set the name to be "dummy" in development to use a simulated keithley.
-
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        # new_instrument = auto_connect_instrument(address=instrument_address)
-        new_instrument = auto_connect_instrument(name="dummy", address=instrument_address)
+        if self.app.simulated_mode: 
+            new_instrument = auto_connect_instrument(name=f"simulated_{self.app.simulated_mode}", address=instrument_address)
+        else:
+            new_instrument = auto_connect_instrument(address=instrument_address)
 
         # Create a new list with the additional instrument
         # directly overwriting this way is necessary to update the reactive variable
@@ -159,7 +157,6 @@ class ParametersScreen(Screen):
         for key, p in selected_instrument.parameters.items():
             if p in self.app.state.read_parameters:
                 self.available_parameters.append(ListItem(Static(p.full_name, classes="read")))
-                print("read")
                 self.action_set_parameter_read(provided_param=p.full_name)
             elif p in self.app.state.write_parameters:
                 self.available_parameters.append(ListItem(Static(p.full_name, classes="write")))
@@ -248,7 +245,6 @@ class ParametersScreen(Screen):
                 title=full_param_name,
             ))) # Fallback, idk why the widget version is broken
 
-
         except (AttributeError, IndexError):
             self.notify("Invalid parameter widget structure")
         except StopIteration:
@@ -293,22 +289,10 @@ class ParametersScreen(Screen):
                 if stripped_param_name.startswith(f"{sub_name}_"):
                     submodule_name = sub_name
                     break
-
             if submodule_name: 
                 doubly_stripped_param_name: str = str(stripped_param_name)[len(submodule_name) + 1:]
                 submodule = instrument.submodules[submodule_name]
                 param: GroupParameter | ParameterBase = submodule.parameters[doubly_stripped_param_name]
-
-                # DEBUGGING, KEEP AROUND
-                # ill never forgive microsoft employees for the crimes they've committed
-                # print(dir(param))
-                # print(param.get)
-                # print(param.gettable)
-                # print(param.get_raw)
-                # print(param.get_latest)
-                # print(f"Parameter type: {type(param)}")
-                # print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
-                # print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
             else:
                 param: GroupParameter | ParameterBase = instrument.parameters[stripped_param_name]
 
@@ -603,8 +587,9 @@ class MainScreen(Screen):
 class Peppermint(App):
     """A Textual app to manage instruments."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, simulated_mode: Optional[bool] = False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.simulated_mode: str | None = simulated_mode
         self.state = SharedState()
         self.state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
         self.state.connected_instruments = []
@@ -634,5 +619,15 @@ class Peppermint(App):
         initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
 
 if __name__ == "__main__":
-    app = Peppermint()
-    app.run()
+    parser = argparse.ArgumentParser(description="Peppermint")
+    # parser.add_argument("--simulated-instruments", default=False, action="store_true", help="Run using a simulated dummy instrument")
+    parser.add_argument(
+        "--simulated-instruments",
+        nargs="?",             # Argument can have 0 or 1 values
+        const="default",       # Value used if the argument is present but no string is provided
+        default=None,          # Value used if the argument is not provided
+        help="Either lakeshore or keithley. Forcibly uses simulated drivers for one or the other for testing purposes."
+    )
+    args = parser.parse_args()
+
+    Peppermint(simulated_mode=args.simulated_instruments).run()
