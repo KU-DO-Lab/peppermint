@@ -8,6 +8,7 @@ A short description with an image of the application.
 Clone this repository and run `pip install -e .` to install the necessary dependencies. Then start the application using `python Peppermint.py`.
 
 For developers, it is recommended to also install textual-dev using `pip install textual-dev` which provides a debug console via `textual console`. To log the application to the console, run Peppermint with `textual run --dev Peppermint.py`.
+Additionally, if you want to work on the project remotely (i.e., you can't plug in to an instrument) you can run the program using `--simulated-instruments lakeshore` or `--simulated-instruments keithley` to load Lakeshore 336 or Keithley 2450 drivers.
 
 ## Features
 
