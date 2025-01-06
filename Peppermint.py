@@ -121,7 +121,6 @@ class ParametersScreen(Screen):
         self.read_parameters: ListView = ListView()
         self.write_parameters: ListView = ListView()
         yield Horizontal(
-            # I am very bad at CSS, this needs changed to use it lmao -Grant
             Vertical(
                 Label("Read Parameters"), self.read_parameters
             ),
@@ -154,24 +153,48 @@ class ParametersScreen(Screen):
         if selected_instrument is None:
             return
 
-        self.available_parameters.clear()
+        self.available_parameters.clear()  
+        self.read_parameters.clear()  
+        self.write_parameters.clear()  
         for key, p in selected_instrument.parameters.items():
-            self.available_parameters.append(ListItem(Static(p.full_name)))
+            if p in self.app.state.read_parameters:
+                self.available_parameters.append(ListItem(Static(p.full_name, classes="read")))
+                print("read")
+                self.action_set_parameter_read(provided_param=p.full_name)
+            elif p in self.app.state.write_parameters:
+                self.available_parameters.append(ListItem(Static(p.full_name, classes="write")))
+                self.action_set_parameter_write(provided_param=p.full_name)
+            else:
+                self.available_parameters.append(ListItem(Static(p.full_name)))
         for name, submodule in selected_instrument.submodules.items():
             if hasattr(submodule, 'parameters'):
                 for key, p in submodule.parameters.items():
-                    self.available_parameters.append(ListItem(Static(p.full_name)))
+                    # self.available_parameters.append(ListItem(Static(p.full_name)))
+                    if p in self.app.state.read_parameters:
+                        self.available_parameters.append(ListItem(Static(p.full_name, classes="read")))
+                        self.action_set_parameter_read(provided_param=p.full_name)
+                    elif p in self.app.state.write_parameters:
+                        self.available_parameters.append(ListItem(Static(p.full_name, classes="write")))
+                        self.action_set_parameter_write(provided_param=p.full_name)
+                    else:
+                        self.available_parameters.append(ListItem(Static(p.full_name)))
 
-    def action_set_parameter_read(self) -> None:
-        """Sets parameter to active read mode"""
+    def action_set_parameter_read(self, provided_param: Optional[str]=None) -> None:
+        """Sets parameter to active read mode, appending it to the list of reading parameters if it is not yet there."""
+
         selected: ListItem | None = self.available_parameters.highlighted_child
-        
-        if not selected or "read" in selected.classes or "write" in selected.classes:
-            self.notify("Already reading/writing parameter" if selected else "No parameter selected")
-            return
+
+        if not provided_param:
+            if not selected or "read" in selected.classes or "write" in selected.classes:
+                self.notify("Already reading/writing parameter" if selected else "No parameter selected")
+                return
 
         try:
-            full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+            if provided_param:
+                full_param_name: str = provided_param
+            else:
+                full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+
             instrument: Optional[VisaInstrument] = next(
                 inst for inst in self.app.state.connected_instruments 
                 if inst.name == self.connected_instrument_list.value
@@ -198,14 +221,14 @@ class ParametersScreen(Screen):
 
                 # DEBUGGING, KEEP AROUND
                 # ill never forgive microsoft employees for the crimes they've committed
-                print(dir(param))
-                print(param.get)
-                print(param.gettable)
-                print(param.get_raw)
-                print(param.get_latest)
-                print(f"Parameter type: {type(param)}")
-                print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
-                print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
+                # print(dir(param))
+                # print(param.get)
+                # print(param.gettable)
+                # print(param.get_raw)
+                # print(param.get_latest)
+                # print(f"Parameter type: {type(param)}")
+                # print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
+                # print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
             else:
                 param: GroupParameter | ParameterBase = instrument.parameters[stripped_param_name]
 
@@ -213,9 +236,18 @@ class ParametersScreen(Screen):
                 self.notify("parameter is not writeable!")
                 return
             
-            selected.add_class("read")
-            self.app.state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
-            self.read_parameters.append(ListItem(ParameterWidget(param, readonly=True)))
+            if selected:
+                selected.add_class("read")
+
+            if param not in self.app.state.read_parameters:
+                self.app.state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
+            # self.read_parameters.append(ListItem(ParameterWidget(param)))
+            self.read_parameters.append(ListItem(Collapsible(
+                Pretty(param.get()), 
+                classes="parameter_entry",
+                title=full_param_name,
+            ))) # Fallback, idk why the widget version is broken
+
 
         except (AttributeError, IndexError):
             self.notify("Invalid parameter widget structure")
@@ -224,7 +256,7 @@ class ParametersScreen(Screen):
         except Exception as e:
             self.notify(f"Error: {str(e)}")
 
-    def action_set_parameter_write(self) -> None:
+    def action_set_parameter_write(self, provided_param=None) -> None:
         """
         Assign the parameter active write mode.
 
@@ -232,12 +264,17 @@ class ParametersScreen(Screen):
         """
         selected: ListItem | None = self.available_parameters.highlighted_child
         
-        if not selected or "read" in selected.classes or "write" in selected.classes:
-            self.notify("Already reading/writing parameter" if selected else "No parameter selected")
-            return
+        if not provided_param:
+            if not selected or "read" in selected.classes or "write" in selected.classes:
+                self.notify("Already reading/writing parameter" if selected else "No parameter selected")
+                return
 
         try:
-            full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+            if provided_param:
+                full_param_name = provided_param
+            else:
+                full_param_name: str = str(selected.children[0].render()._renderable) # type: ignore
+
             instrument: Optional[VisaInstrument] = next(
                 inst for inst in self.app.state.connected_instruments 
                 if inst.name == self.connected_instrument_list.value
@@ -264,14 +301,14 @@ class ParametersScreen(Screen):
 
                 # DEBUGGING, KEEP AROUND
                 # ill never forgive microsoft employees for the crimes they've committed
-                print(dir(param))
-                print(param.get)
-                print(param.gettable)
-                print(param.get_raw)
-                print(param.get_latest)
-                print(f"Parameter type: {type(param)}")
-                print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
-                print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
+                # print(dir(param))
+                # print(param.get)
+                # print(param.gettable)
+                # print(param.get_raw)
+                # print(param.get_latest)
+                # print(f"Parameter type: {type(param)}")
+                # print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
+                # print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
             else:
                 param: GroupParameter | ParameterBase = instrument.parameters[stripped_param_name]
 
@@ -279,9 +316,16 @@ class ParametersScreen(Screen):
                 self.notify("parameter is not writeable!")
                 return 
 
-            selected.add_class("write")
+            if selected:
+                selected.add_class("write")
+
             self.app.state.write_parameters.append(param) # in case the parameter needs to be accessed in a database
-            self.write_parameters.append(ListItem(ParameterWidget(param, readonly=False)))
+            # self.write_parameters.append(ListItem(ParameterWidget(param, readonly=False)))
+            self.write_parameters.append(ListItem(Collapsible(
+                Pretty(param.get()), 
+                classes="parameter_entry",
+                title=full_param_name,
+            ))) # Fallback, idk why the widget version is broken
 
         except (AttributeError, IndexError):
             self.notify("Invalid parameter widget structure")
@@ -361,7 +405,7 @@ class TemperatureScreen(Screen):
                 # Record data for this channel
                 # Saved to the QCoDeS run which gets started when this screen is initialized.
                 if channel in self.datasavers and self.datasavers[channel]:
-                    print(channel, param, value)
+                    # print(channel, param, value)
                     self.datasavers[channel].add_result( (param, value) )
 
     def cleanup(self) -> None:
@@ -372,8 +416,8 @@ class TemperatureScreen(Screen):
         
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
-        allowed_monitor_types = (LakeshoreModel336)
-        self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, allowed_monitor_types)] # type: ignore
+        self.allowed_monitor_types = (LakeshoreModel336)
+        self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select = Select[str](self.instrument_options)
 
@@ -402,6 +446,8 @@ class TemperatureScreen(Screen):
         Handle the ScreenResume event. 
         Whenever the temperature screen is opened, we need to make sure every temperature monitor parameter is running. 
         """
+
+        self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
 
         if len(self.allowed_temperature_monitors) <= 0: 
             self.notify("please connect the Lakeshore 336!")

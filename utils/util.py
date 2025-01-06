@@ -12,71 +12,71 @@ from textual.reactive import reactive
 from typing import Optional
 
 class ParameterWidget(Widget):
-    def __init__(self, param, readonly):
+    def __init__(self, param):
         super().__init__()
         self.param: ParameterBase = param
-        self.readonly: bool | None = readonly
         self.update_timer = None
 
     def compose(self) -> ComposeResult:
-        yield Collapsible(
-            Pretty(self.param.get()),
-            Horizontal(
-                Static("Live Update:     ", classes="label"), 
-                Switch(id="live_toggle", value=False),
-                classes="container"
-            ),
-            Input(id="update_freq", placeholder="Update Frequency (hz)"),
-            classes="parameter_entry",
-            title=self.param.full_name,
-        )
-
-    async def on_screen_suspend(self):
-        """When the screen is suspended pause everything"""
-        self.stop_updates()
-
-    async def on_screen_resume(self) -> None:
-        """restore previous state on screen resume"""
-        self.update_timer = self.set_interval(1.0, self.update_value)
-        self.restart_updates(self.update_timer)
-
-    def on_switch_changed(self, event: Switch.Changed) -> None:
-        if event.switch.value:
-            self.start_updates()
-        else:
-            self.stop_updates()
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.value:
-            try:
-                freq = float(event.input.value)
-                self.restart_updates(freq)
-            except ValueError:
-                pass
-
-    def on_mount(self) -> None:
-        self.start_updates()
-
-    def start_updates(self, freq=1.0):
-        self.stop_updates()
-        self.update_timer = self.set_interval(1/freq, self.update_value)
-        
-    def stop_updates(self):
-        if self.update_timer:
-            self.update_timer.stop()
-
-    def restart_updates(self, freq):
-        self.start_updates(freq)
-        
-    def update_value(self):
-        self.query_one(Pretty).update(self.param.get())
-
-def update_option_list(option_list: OptionList, items: list):
-    """Helper method to update an OptionList's contents."""
-    option_list.clear_options()
-    for item in items:
-        option_list.add_option(item)
-
+        yield Pretty(self.param.get())
+        # yield Collapsible(
+        #     Pretty(self.param.get()),
+        #     Horizontal(
+        #         Static("Live Update:     ", classes="label"), 
+        #         Switch(id="live_toggle", value=False),
+        #         classes="container"
+        #     ),
+        #     Input(id="update_freq", placeholder="Update Frequency (hz)"),
+        #     classes="parameter_entry",
+        #     title=self.param.full_name,
+        # )
+        #
+#     async def on_screen_suspend(self):
+#         """When the screen is suspended pause everything"""
+#         self.stop_updates()
+#
+#     async def on_screen_resume(self) -> None:
+#         """restore previous state on screen resume"""
+#         self.update_timer = self.set_interval(1.0, self.update_value)
+#         self.restart_updates(self.update_timer)
+#
+#     def on_switch_changed(self, event: Switch.Changed) -> None:
+#         if event.switch.value:
+#             self.start_updates()
+#         else:
+#             self.stop_updates()
+#
+#     def on_input_changed(self, event: Input.Changed) -> None:
+#         if event.input.value:
+#             try:
+#                 freq = float(event.input.value)
+#                 self.restart_updates(freq)
+#             except ValueError:
+#                 pass
+#
+#     def on_mount(self) -> None:
+#         self.start_updates()
+#
+#     def start_updates(self, freq=1.0):
+#         self.stop_updates()
+#         self.update_timer = self.set_interval(1/freq, self.update_value)
+#
+#     def stop_updates(self):
+#         if self.update_timer:
+#             self.update_timer.stop()
+#
+#     def restart_updates(self, freq):
+#         self.start_updates(freq)
+#
+#     def update_value(self):
+#         self.query_one(Pretty).update(self.param.get())
+#
+# def update_option_list(option_list: OptionList, items: list):
+#     """Helper method to update an OptionList's contents."""
+#     option_list.clear_options()
+#     for item in items:
+#         option_list.add_option(item)
+#
 def update_select(select_list: Select, items: list):
     """Helper method to update an Select's contents."""
     select_list.set_options(
