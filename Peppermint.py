@@ -16,7 +16,7 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import Footer, Header, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
+from textual.widgets import Footer, Header, RadioButton, RadioSet, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
 
 
 @dataclass
@@ -342,6 +342,8 @@ class TemperatureScreen(Screen):
         self.chD_temperature = Static("N/A", id="channel_D")
 
         # Channel widget mappings
+        # C and D are disabled for now since they don't output anything on our system.
+        # We really want a switch to enable or disable them.
         self.channel_widgets = {
             'A': self.chA_temperature,
             'B': self.chB_temperature,
@@ -390,7 +392,6 @@ class TemperatureScreen(Screen):
                 # Record data for this channel
                 # Saved to the QCoDeS run which gets started when this screen is initialized.
                 if channel in self.datasavers and self.datasavers[channel]:
-                    # print(channel, param, value)
                     self.datasavers[channel].add_result( (param, value) )
 
     def cleanup(self) -> None:
@@ -414,6 +415,9 @@ class TemperatureScreen(Screen):
         # print("D = ", lake.output_1.D())
         # print("I = ", lake.output_1.I())
 
+        heater_mode = RadioSet(RadioButton("off", value=True), "closed_loop (feedback loop / automatic)", "open_loop (no feedback loop / manual)", id="heater_mode") # must add "zone",  "monitor_out", "warm_up"
+        output_range = RadioSet(RadioButton("off", value=True), "low", "medium", "high", id="output_range")
+
         self.status_table = Container(
             Horizontal(Label("Channel A:    "), self.chA_temperature),
             Horizontal(Label("Channel B:    "), self.chB_temperature),
@@ -424,10 +428,15 @@ class TemperatureScreen(Screen):
         yield Container(
         Horizontal(
             Horizontal(Static("Temperature Controller:     \n(Currently useless)", classes="label"), self.temperature_monitors_select, classes="temp_controller_instrument"),
-            Vertical(Static("Status:", classes="label"), self.status_table, id="temp_controller_status"),
-            Container(Placeholder(), id="temp_controller_controls"),
-            id="temperature_controller_info"
-        ),
+            Horizontal(Static("Status:    ", classes="label"), self.status_table, id="temperature_controller_status"),
+            Vertical(
+                Horizontal(
+                    Vertical( Static("Heater Mode:    ", classes="label"), heater_mode ),
+                    Vertical( Static("Output Range:    ", classes="label"), output_range ),
+                ),
+                Horizontal( Static("Setpoint:    ", classes="label"), Input(placeholder="...", disabled=True, id="setpoint_field") ),
+                id="temperature_controller_controls"
+            )),
             Container(Placeholder())
         )
         yield Footer()
@@ -465,6 +474,23 @@ class TemperatureScreen(Screen):
         self.initialize_measurements()
         self.get_temperatures()
         self.start_temperature_polling()
+
+    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+        """Handle changes in any RadioSet."""
+
+        if not event.radio_set.id:
+            return
+
+        # Map RadioSet IDs to their corresponding handling logic
+        handlers = {
+            "heater_mode": lambda: print(event.pressed.label),
+            "output_range": lambda: print(event.pressed.label)
+        }
+
+        # Call the appropriate handler if the RadioSet ID exists in the map
+        handler = handlers.get(event.radio_set.id)
+        if handler:
+            handler()
 
     def start_temperature_polling(self) -> None:
         self.stop_temperature_polling()

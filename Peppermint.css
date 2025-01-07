@@ -43,7 +43,7 @@ Switch {
     background: $surface;
 }
 
-#temperature_controller_info {
+#temperature_controller_status {
     height: 0.25fr;
     min-height: 7;
 }
