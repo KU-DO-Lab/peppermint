@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import argparse
 
 from utils.util import *
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Generic, Optional
 from dataclasses import dataclass
 from qcodes.dataset import Measurement, initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import GroupParameter, Parameter, ParameterBase
@@ -238,6 +238,7 @@ class ParametersScreen(Screen):
 
             if param not in self.app.state.read_parameters:
                 self.app.state.read_parameters.append(param) # in case the parameter needs to be accessed in a database
+
             # self.read_parameters.append(ListItem(ParameterWidget(param)))
             self.read_parameters.append(ListItem(Collapsible(
                 Pretty(param.get()), 
@@ -328,7 +329,7 @@ class TemperatureScreen(Screen):
 
     def __init__(self):
         super().__init__()
-        self.polling_frequency = 1.0
+        self.polling_frequency = 0.25
         self.update_timer = None
         
         self.experiments = {}
@@ -405,23 +406,29 @@ class TemperatureScreen(Screen):
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select = Select[str](self.instrument_options)
 
+        # DEBUG
+        # lake = self.allowed_temperature_monitors[0]
+        # print(dir(lake.output_1))
+        # print(lake.output_1.input_channel())
+        # print("P = ", lake.output_1.P())
+        # print("D = ", lake.output_1.D())
+        # print("I = ", lake.output_1.I())
+
         self.status_table = Container(
             Horizontal(Label("Channel A:    "), self.chA_temperature),
             Horizontal(Label("Channel B:    "), self.chB_temperature),
             Horizontal(Label("Channel C:    "), self.chC_temperature),
             Horizontal(Label("Channel D:    "), self.chD_temperature),
         )
-
-        # This mess should probably be rewritten by someone with a nonzero amount of css skill
         yield Header()
         yield Container(
         Horizontal(
             Horizontal(Static("Temperature Controller:     \n(Currently useless)", classes="label"), self.temperature_monitors_select, classes="temp_controller_instrument"),
-            Vertical(Static("Status:", classes="label"), self.status_table, classes="temp_controller_status"),
-            Container(Placeholder(), classes="temp_controller_controls"),
+            Vertical(Static("Status:", classes="label"), self.status_table, id="temp_controller_status"),
+            Container(Placeholder(), id="temp_controller_controls"),
             id="temperature_controller_info"
         ),
-        Container()
+            Container(Placeholder())
         )
         yield Footer()
 
@@ -586,11 +593,11 @@ class MainScreen(Screen):
         
 class Peppermint(App):
     """A Textual app to manage instruments."""
-
-    def __init__(self, simulated_mode: Optional[bool] = False, *args, **kwargs):
+    
+    def __init__(self, simulated_mode: Optional[str | None] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.simulated_mode: str | None = simulated_mode
-        self.state = SharedState()
+        self.simulated_mode: Optional[str | None] = simulated_mode
+        self.state: SharedState = SharedState()
         self.state.detected_instruments = [ instr for instr in pyvisa.ResourceManager().list_resources() ]
         self.state.connected_instruments = []
         self.state.write_parameters = []
