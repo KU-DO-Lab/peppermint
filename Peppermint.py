@@ -405,7 +405,7 @@ class TemperatureScreen(Screen):
         self.allowed_monitor_types = (LakeshoreModel336)
         self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
-        self.temperature_monitors_select = Select[str](self.instrument_options)
+        self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
 
         # DEBUG
         # lake = self.allowed_temperature_monitors[0]
@@ -415,29 +415,63 @@ class TemperatureScreen(Screen):
         # print("D = ", lake.output_1.D())
         # print("I = ", lake.output_1.I())
 
-        heater_mode = RadioSet(RadioButton("off", value=True), "closed_loop (feedback loop / automatic)", "open_loop (no feedback loop / manual)", id="heater_mode") # must add "zone",  "monitor_out", "warm_up"
-        output_range = RadioSet(RadioButton("off", value=True), "low", "medium", "high", id="output_range")
+        heater_mode = RadioSet(
+            RadioButton("off", value=True), 
+            RadioButton("closed_loop", tooltip="feedback loop (automatic)"), 
+            RadioButton("open_loop", tooltip="no feedback loop (manual)"),
+            RadioButton("zone", tooltip="Not yet implemented", disabled=True),
+        )
+
+        output_range = RadioSet(
+            RadioButton("off", value=True), 
+            RadioButton("low"), 
+            RadioButton("medium"), 
+            RadioButton("high"),
+        )
 
         self.status_table = Container(
             Horizontal(Label("Channel A:    "), self.chA_temperature),
             Horizontal(Label("Channel B:    "), self.chB_temperature),
             Horizontal(Label("Channel C:    "), self.chC_temperature),
             Horizontal(Label("Channel D:    "), self.chD_temperature),
+            classes="info"
         )
         yield Header()
-        yield Container(
-        Horizontal(
-            Horizontal(Static("Temperature Controller:     \n(Currently useless)", classes="label"), self.temperature_monitors_select, classes="temp_controller_instrument"),
-            Horizontal(Static("Status:    ", classes="label"), self.status_table, id="temperature_controller_status"),
-            Vertical(
+        yield Vertical(
+
+            # Top row: contains statistics and controls
+            Horizontal(
                 Horizontal(
-                    Vertical( Static("Heater Mode:    ", classes="label"), heater_mode ),
-                    Vertical( Static("Output Range:    ", classes="label"), output_range ),
+                    Static("Temperature Controller:     \n(Currently useless)", classes="label"), 
+                    self.temperature_monitors_select, 
+                    classes="outlined-container",
+                    id="temperature-controller-select",
                 ),
-                Horizontal( Static("Setpoint:    ", classes="label"), Input(placeholder="...", disabled=True, id="setpoint_field") ),
-                id="temperature_controller_controls"
-            )),
-            Container(Placeholder())
+                Horizontal(
+                    Static("Status:    ", classes="label"), 
+                    self.status_table, 
+                    classes="outlined-container", 
+                    id="temperature-controller-status",
+                ),
+                Vertical(
+                    Horizontal(
+                        Vertical( Static("Heater Mode:    ", classes="label"), heater_mode, id="heater-mode" ),
+                        Vertical( Static("Output Range:    ", classes="label"), output_range, id="output-range" ),
+                        classes="temperature-controller-controls",
+                    ),
+                    Horizontal( 
+                        Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=True, id="setpoint-field"), Static("(K)", classes="label"),
+                        Button("Confirm!", classes="confirmation"),
+                        classes="temperature-controller-controls",
+                    ),
+                    classes="centered-widget"
+                ),
+                classes="centered-widget"
+            ),
+
+            # Bottom rows: contains visual information
+            Container(Placeholder()),
+            classes="outlined-container",
         )
         yield Footer()
 
@@ -474,6 +508,9 @@ class TemperatureScreen(Screen):
         self.initialize_measurements()
         self.get_temperatures()
         self.start_temperature_polling()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        ...
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""

@@ -2,23 +2,26 @@ ManualConnectionDialog {
     align: center middle;
 }
 
-Switch {
-    height: auto;
-    width: auto;
-}
-
 .container {
     height: auto;
     width: auto;
 }
 
 .label {
-    height: 3;
-    content-align: center middle;
+    height: auto;
     width: auto;
+    padding: 1 1;
+    align: center middle;
 }
 
-#writeParam { }
+.field {
+    content-align: center middle;
+}
+
+.confirmation {
+    height: auto;
+    width: auto;
+}
 
 #main-menu-grid {
     layout: grid;
@@ -43,12 +46,6 @@ Switch {
     background: $surface;
 }
 
-#temperature_controller_status {
-    height: 0.25fr;
-    min-height: 7;
-}
-
-
 #title {
     column-span: 2;
     height: 1fr;
@@ -56,18 +53,26 @@ Switch {
     content-align: center middle;
 }
 
-#tmp {
-    column-span: 2;
-    height: 1fr;
-    width: 1fr;
-    content-align: center middle;
-}
-
-#short_container {
+#short-container {
     height: 25%;
 }
 
+.centered-widget {
+    width: auto;
+    align-horizontal: center;
+}
 
+.outlined-container {
+    border: round white 10%;
+    width: auto;
+    height: auto;
+}
+
+.info {
+    content-align: center middle;
+}
+
+/*Parameters Screen*/
 .read {
     color: #00a400;
 }
@@ -76,9 +81,43 @@ Switch {
     color: #F05D23;
 }
 
-/* Utility classes */
-.centered-widget {
-    width: 30%;
-    align-horizontal: center;
+/*Temperature controller screen*/
+#heater-mode {
+    width: auto;
+    height: auto;
 }
 
+#output-range{
+    width: auto;
+    height: auto;
+}
+
+#temperature-controller-select {
+    height: 0.25fr;
+    min-height: 6;
+    margin: 2 1;
+    min-width: 30;
+    max-width: 60;
+    width: 0.6fr;
+}
+
+#temperature-controller-status {
+    min-width: 35;
+    max-width: 35;
+    min-height: 6;
+    height: 0.25fr;
+    margin: 2 1;
+    width: auto;
+}
+
+.temperature-controller-controls {
+    height: auto;
+    width: auto;
+    border: round white 10%;
+    align-horizontal: center;
+    content-align: center middle;
+}
+
+#setpoint-field {
+    width: auto;
+}
