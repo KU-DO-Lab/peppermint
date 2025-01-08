@@ -360,7 +360,9 @@ class TemperatureScreen(Screen):
 
         self.plotter = SimpleLivePlotter(
             channels=list(self.channel_widgets.keys()),
-            datasavers=self.datasavers,
+            title="Automated Temperature Monitor",
+            xlabel="time (s)",
+            ylabel="temperature (k)",
         )
 
     def initialize_measurements(self) -> None:
