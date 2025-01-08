@@ -413,8 +413,11 @@ class TemperatureScreen(Screen):
         self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
 
         # DEBUG
-        # lake = self.allowed_temperature_monitors[0]
-        # print(dir(lake.output_1))
+        lake = self.allowed_temperature_monitors[0]
+        print(dir(lake.output_1))
+        print(lake.output_1.mode)
+        print(lake.output_1.name)
+        print(lake.output_1.print_readable_snapshot())
         # print(lake.output_1.input_channel())
         # print("P = ", lake.output_1.P())
         # print("D = ", lake.output_1.D())
@@ -514,6 +517,17 @@ class TemperatureScreen(Screen):
         self.get_temperatures()
         self.start_temperature_polling()
 
+    def set_heater_mode(self, mode: str) -> None:
+        match mode: 
+            case "off":
+                ...
+            case "closed_loop":
+                ...
+            case "open_loop":
+                ...
+            case "zone":
+                ...
+
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
 
@@ -522,7 +536,7 @@ class TemperatureScreen(Screen):
 
         # Map RadioSet IDs to their corresponding handling logic
         handlers = {
-            "heater_mode": lambda: print(event.pressed.label),
+            "heater_mode": self.set_heater_mode(str(event.pressed.label)),
             "output_range": lambda: print(event.pressed.label)
         }
 
@@ -544,7 +558,7 @@ class TemperatureScreen(Screen):
 
     def action_initialize_plot(self) -> None:
         """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
-        print("starting plot!")
+        # print("starting plot!")
         self.plotter.start()
 
 class Sweep1DScreen(Screen):
