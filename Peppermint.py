@@ -1,8 +1,6 @@
 import os
 import logging
 import pyvisa
-import time
-import matplotlib.pyplot as plt
 import argparse
 
 from utils.util import *
@@ -331,7 +329,8 @@ class TemperatureScreen(Screen):
         super().__init__()
         self.polling_frequency = 0.25
         self.update_timer = None
-        
+        self.start_time = time.time()
+ 
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
         self.datasavers: Dict[str, Any] = {}
@@ -359,6 +358,11 @@ class TemperatureScreen(Screen):
                 sample_name="Lakeshore Auto Monitor"
             )
 
+        self.plotter = SimpleLivePlotter(
+            channels=list(self.channel_widgets.keys()),
+            datasavers=self.datasavers,
+        )
+
     def initialize_measurements(self) -> None:
         """Initialize separate measurements for each channel"""
         for param in self.app.state.read_parameters:
@@ -378,6 +382,7 @@ class TemperatureScreen(Screen):
 
     def get_temperatures(self) -> None:
         """Get and record temperatures for each channel"""
+
         for param in self.app.state.read_parameters:
             if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
                 continue
@@ -394,12 +399,10 @@ class TemperatureScreen(Screen):
                 if channel in self.datasavers and self.datasavers[channel]:
                     self.datasavers[channel].add_result( (param, value) )
 
-    def cleanup(self) -> None:
-        """Clean up the datasavers when done"""
-        for datasaver in self.datasavers.values():
-            if datasaver:
-                datasaver.__exit__(None, None, None)
-        
+                if self.plotter:
+                    current_time = time.time() - self.start_time
+                    self.plotter.update(channel, x=current_time, y=value)
+
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
         self.allowed_monitor_types = (LakeshoreModel336)
@@ -509,9 +512,6 @@ class TemperatureScreen(Screen):
         self.get_temperatures()
         self.start_temperature_polling()
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        ...
-
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
 
@@ -530,67 +530,20 @@ class TemperatureScreen(Screen):
             handler()
 
     def start_temperature_polling(self) -> None:
-        self.stop_temperature_polling()
+        self.start_time = time.time()
+        # self.stop_temperature_polling()
         self.update_timer = self.set_interval(1/self.polling_frequency, self.get_temperatures)
 
-    def stop_temperature_polling(self) -> None:
-        """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
-        if self.update_timer:
-            self.update_timer.stop()
+    # def stop_temperature_polling(self) -> None:
+    #     """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
+    #     if self.update_timer:
+    #         self.update_timer.stop()
+    #     self.plotter.stop()
 
     def action_initialize_plot(self) -> None:
         """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
-        self.fig, self.ax = plt.subplots()
-        self.ax.set_title("Channel Temperatures")
-        self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Temperature (K)")
-
-        # Store time and temperature data for each channel
-        self.plot_data = {channel: {"time": [], "temperature": []} for channel in ['A', 'B', 'C', 'D']}
-        self.plot_lines = {}
-
-        # Initialize lines for each channel in the plot
-        for channel in list(self.channel_widgets.keys()): # [A,B,C,D]
-            line, = self.ax.plot([], [], label=f"Channel {channel}")
-            self.plot_lines[channel] = line
-
-        self.ax.legend()
-        plt.show(block=False)
-
-        self.start_plot_update()
-
-    def start_plot_update(self) -> None:
-        """Start polling data and updating the plot."""
-        self.plot_start_time = time.time()
-        self.update_timer = self.set_interval(1 / self.polling_frequency, self.update_plot)
-
-    def update_plot(self) -> None:
-        """Poll data, update the Matplotlib plot, and refresh it."""
-        current_time = time.time() - self.plot_start_time
-
-        for param in self.app.state.read_parameters:
-            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
-                continue
-
-            channel = param.name_parts[1]
-            value = param.get()
-
-            # Update stored data
-            self.plot_data[channel]["time"].append(current_time)
-            self.plot_data[channel]["temperature"].append(value)
-
-            # Update plot line data
-            self.plot_lines[channel].set_xdata(self.plot_data[channel]["time"])
-            self.plot_lines[channel].set_ydata(self.plot_data[channel]["temperature"])
-
-        # Adjust axes limits dynamically
-        self.ax.relim()
-        self.ax.autoscale_view()
-
-        # Redraw the plot
-        self.fig.canvas.flush_events()
-        self.fig.canvas.draw()
-
+        print("starting plot!")
+        self.plotter.start()
 
 class Sweep1DScreen(Screen):
     """TODO"""

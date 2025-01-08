@@ -1,4 +1,5 @@
 import pyvisa
+from qcodes.dataset import plot_dataset
 from qcodes.instrument import VisaInstrument
 from qcodes.parameters import ParameterBase
 from textual.app import ComposeResult
@@ -10,65 +11,233 @@ from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
 from textual.reactive import reactive
 from typing import Optional
+import time
+from typing import Dict, List, Any, Callable, Optional
 
-class ParameterWidget(Widget):
-    def __init__(self, param):
-        super().__init__()
-        self.param: ParameterBase = param
-        self.update_timer = None
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from queue import Queue
+import threading
+from collections import deque
+from typing import List, Dict, Any, Tuple
 
-    def compose(self) -> ComposeResult:
-        yield Collapsible(
-            Pretty(self.param.get()),
-            Horizontal(
-                Static("Live Update:     ", classes="label"), 
-                Switch(id="live_toggle", value=False),
-                classes="container"
-            ),
-            Input(id="update_freq", placeholder="Update Frequency (hz)"),
-            classes="parameter_entry",
-            title=self.param.full_name,
+class SimpleLivePlotter:
+    """A real-time data plotting class using matplotlib.
+    
+    This class implements a thread-safe live plotting system that can handle
+    multiple data channels simultaneously. It runs the plot in a separate thread
+    to prevent blocking the main execution thread. Cost much of my sanity to make.
+    
+    Attributes:
+        channels: List of channel names to plot.
+        datasavers: Dictionary of data saving objects.
+        max_points: Maximum number of points to keep in memory.
+        xlabel: Label for x-axis.
+        ylabel: Label for y-axis.
+        title: Plot title.
+    """
+    
+    def __init__(
+        self,
+        channels: List[str],
+        datasavers: Dict[str, Any],
+        max_points: int = 16384,
+        xlabel: str = "X-AXIS",
+        ylabel: str = "Y-AXIS",
+        title: str = "A LIVE Plot"
+    ):
+        """Initialize the live plotter.
+        
+        Args:
+            channels: List of channel names to plot.
+            datasavers: Dictionary of data saving objects.
+            max_points: Maximum number of points to keep in memory per channel.
+            xlabel: Label for x-axis.
+            ylabel: Label for y-axis.
+            title: Plot title.
+        """
+        # Queue for thread-safe data transfer
+        self.data_queue = Queue()
+        
+        # Plot configuration
+        self.title = title
+        self.xlabel = xlabel 
+        self.ylabel = ylabel
+        self.channels = channels
+        self.datasavers = datasavers
+        self.max_points = max_points
+        
+        # Data storage using deques with max length for memory management
+        self.plot_data = {
+            channel: {
+                "x": deque(maxlen=max_points),
+                "y": deque(maxlen=max_points)
+            }
+            for channel in channels
+        }
+        
+        # Plot objects
+        self.fig = None
+        self.ax = None
+        self.plot_lines = {}
+        self.plot_start_time = time.time()
+        self.running = False
+        self.animation = None
+        self.plot_thread = None
+
+    def setup_plot(self) -> None:
+        """Initialize the matplotlib plot with basic configuration.
+        
+        Creates figure, axes, and line objects for each channel.
+        """
+        self.fig, self.ax = plt.subplots(figsize=(10, 6))
+        self.ax.set_title(self.title)
+        self.ax.set_xlabel(self.xlabel)
+        self.ax.set_ylabel(self.ylabel)
+        self.ax.grid(True)
+        
+        # Create empty line objects for each channel
+        for channel in self.channels:
+            line, = self.ax.plot([], [], label=channel)
+            self.plot_lines[channel] = line
+            
+        self.ax.legend()
+
+    def _plot_worker(self):
+        """Worker function that runs in a separate thread to handle plotting.
+        
+        Sets up the plot and animation, then starts the matplotlib event loop.
+        The animation continuously updates with new data from the queue.
+        """
+        self.setup_plot()
+        self.running = True
+        
+        def animate(frame):
+            """Animation function called by FuncAnimation.
+            
+            Args:
+                frame: Frame number (unused but required by FuncAnimation)
+            
+            Returns:
+                List of updated line objects for blitting optimization.
+            """
+            if not self.running:
+                return []
+                
+            # Process all available data in queue
+            while not self.data_queue.empty():
+                channel, x, y = self.data_queue.get()
+                self.plot_data[channel]["x"].append(x)
+                self.plot_data[channel]["y"].append(y)
+                self.plot_lines[channel].set_data(
+                    list(self.plot_data[channel]["x"]),
+                    list(self.plot_data[channel]["y"])
+                )
+            
+            # Update plot limits
+            self.ax.relim()
+            self.ax.autoscale_view()
+            return list(self.plot_lines.values())
+            
+        # Create animation that updates every 50ms
+        self.animation = FuncAnimation(
+            self.fig, 
+            animate,
+            interval=50,
+            blit=True
         )
+        plt.show()
 
-    async def on_screen_suspend(self):
-        """When the screen is suspended pause everything"""
-        self.stop_updates()
+    def start(self) -> None:
+        """Start the plotting thread if not already running."""
+        if not self.plot_thread:
+            self.plot_thread = threading.Thread(target=self._plot_worker, daemon=True)
+            self.plot_thread.start()
 
-    async def on_screen_resume(self) -> None:
-        """restore previous state on screen resume"""
-        self.update_timer = self.set_interval(1.0, self.update_value)
-        self.restart_updates(self.update_timer)
+    def update(self, channel: str, x: float, y: float) -> None:
+        """Add new data point to the specified channel's plot.
+        
+        Args:
+            channel: Name of the channel to update.
+            x: X-coordinate of the new data point.
+            y: Y-coordinate of the new data point.
+        """
+        if channel in self.channels:
+            self.data_queue.put((channel, x, y))
 
-    def on_switch_changed(self, event: Switch.Changed) -> None:
-        if event.switch.value:
-            self.start_updates()
-        else:
-            self.stop_updates()
+    def stop(self) -> None:
+        """Stop the plotting thread and clean up resources.
+        
+        Stops the animation, closes the plot window, and joins the plotting thread.
+        """
+        self.running = False
+        if self.animation:
+            self.animation.event_source.stop()
+        if self.fig:
+            plt.close(self.fig)
+            self.fig = None
+        if self.plot_thread:
+            self.plot_thread.join()
+            self.plot_thread = None
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.value:
-            try:
-                freq = float(event.input.value)
-                self.restart_updates(freq)
-            except ValueError:
-                pass
-
-    def on_mount(self) -> None:
-        self.start_updates()
-
-    def start_updates(self, freq=1.0):
-        self.stop_updates()
-        self.update_timer = self.set_interval(1/freq, self.update_value)
-
-    def stop_updates(self):
-        if self.update_timer:
-            self.update_timer.stop()
-
-    def restart_updates(self, freq):
-        self.start_updates(freq)
-
-    def update_value(self):
-        self.query_one(Pretty).update(self.param.get())
+# class ParameterWidget(Widget):
+#     def __init__(self, param):
+#         super().__init__()
+#         self.param: ParameterBase = param
+#         self.update_timer = None
+#
+#     def compose(self) -> ComposeResult:
+#         yield Collapsible(
+#             Pretty(self.param.get()),
+#             Horizontal(
+#                 Static("Live Update:     ", classes="label"), 
+#                 Switch(id="live_toggle", value=False),
+#                 classes="container"
+#             ),
+#             Input(id="update_freq", placeholder="Update Frequency (hz)"),
+#             classes="parameter_entry",
+#             title=self.param.full_name,
+#         )
+#
+#     async def on_screen_suspend(self):
+#         """When the screen is suspended pause everything"""
+#         self.stop_updates()
+#
+#     async def on_screen_resume(self) -> None:
+#         """restore previous state on screen resume"""
+#         self.update_timer = self.set_interval(1.0, self.update_value)
+#         self.restart_updates(self.update_timer)
+#
+#     def on_switch_changed(self, event: Switch.Changed) -> None:
+#         if event.switch.value:
+#             self.start_updates()
+#         else:
+#             self.stop_updates()
+#
+#     def on_input_changed(self, event: Input.Changed) -> None:
+#         if event.input.value:
+#             try:
+#                 freq = float(event.input.value)
+#                 self.restart_updates(freq)
+#             except ValueError:
+#                 pass
+#
+#     def on_mount(self) -> None:
+#         self.start_updates()
+#
+#     def start_updates(self, freq=1.0):
+#         self.stop_updates()
+#         self.update_timer = self.set_interval(1/freq, self.update_value)
+#
+#     def stop_updates(self):
+#         if self.update_timer:
+#             self.update_timer.stop()
+#
+#     def restart_updates(self, freq):
+#         self.start_updates(freq)
+#
+#     def update_value(self):
+#         self.query_one(Pretty).update(self.param.get())
 
 def update_option_list(option_list: OptionList, items: list):
     """Helper method to update an OptionList's contents."""
