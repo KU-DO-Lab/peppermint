@@ -415,14 +415,12 @@ class TemperatureScreen(Screen):
 
         # DEBUG
         lake = self.allowed_temperature_monitors[0]
-        print(dir(lake.output_1))
-        print(lake.output_1.mode)
-        print(lake.output_1.name)
-        print(lake.output_1.print_readable_snapshot())
-        # print(lake.output_1.input_channel())
-        # print("P = ", lake.output_1.P())
-        # print("D = ", lake.output_1.D())
-        # print("I = ", lake.output_1.I())
+        # print(dir(lake.output_1))
+        # print(lake.output_1.mode)
+        # print(lake.output_1.name)
+        # print(lake.output_1.print_readable_snapshot())
+
+        self.setpoint_field = Input(placeholder="...", disabled=False, type="number", id="setpoint-field") # need to check enabled on screen change
 
         heater_mode = RadioSet(
             RadioButton("off", value=True), 
@@ -469,7 +467,7 @@ class TemperatureScreen(Screen):
                         classes="temperature-controller-controls",
                     ),
                     Horizontal( 
-                        Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=True, id="setpoint-field"), Static("(K)", classes="label"),
+                        Static("Setpoint:", classes="label"), self.setpoint_field, Static("(K)", classes="label"),
                         Button("Confirm!", classes="confirmation"),
                         classes="temperature-controller-controls",
                     ),
@@ -520,6 +518,24 @@ class TemperatureScreen(Screen):
 
     def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
         channel.mode(mode)
+        if mode != "off":
+            self.setpoint_field.disabled=False
+        else:
+            self.setpoint_field.disabled=True
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        lake = self.allowed_temperature_monitors[0]
+        channel = lake.output_1
+
+        if self.setpoint_field.value == "":
+            return
+
+        if not self.setpoint_field.disabled:
+            channel.setpoint(float(self.setpoint_field.value))
+
+
+    def set_output_range(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
+        channel.output_range(mode)
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
@@ -532,8 +548,8 @@ class TemperatureScreen(Screen):
 
         # Map RadioSet IDs to their corresponding handling logic
         handlers = {
-            "heater_mode": lambda: channel.mode(str(event.pressed.label)),
-            "output_range": lambda: channel.output_range(str(event.pressed.label))
+            "heater_mode": self.set_heater_mode(channel, mode),
+            "output_range": self.set_output_range(channel, mode)
         }
 
         print(event.pressed.label)
