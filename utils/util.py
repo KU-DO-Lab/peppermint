@@ -1,11 +1,13 @@
 from bokeh.plotting import figure, curdoc
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
+from bokeh.palettes import Spectral11
 import pyvisa
 from qcodes.instrument import VisaInstrument
 from textual.widgets import OptionList, Select, Input
 from typing import Optional, Dict, List, Any
 import time
+import webbrowser # to open the bokeh plot automatically without blocking the terminal
 from queue import Queue
 import threading
 from collections import deque
@@ -16,32 +18,29 @@ class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
 
     This class allows plotting real-time data using Bokeh, updating the plot
-    periodically as new data is received.
+    periodically as new data is received. Bokeh is used instead of matplotlib,
+    due to matplotlib's issues with threading/blocking'
     """
 
     def __init__(
         self,
         channels: List[str],
-        max_points: int = 2^17,
+        max_points: int = 2**16,
         xlabel: str = "X-AXIS",
         ylabel: str = "Y-AXIS",
         title: str = "A LIVE Plot"
     ):
-        """Initialize the plotter with specified channels and plot parameters.
-
-        Args:
-            channels (List[str]): A list of channels to plot.
-            max_points (int, optional): Maximum number of data points to plot per channel. Default is 1000.
-            xlabel (str, optional): Label for the X-axis. Default is "X-AXIS".
-            ylabel (str, optional): Label for the Y-axis. Default is "Y-AXIS".
-            title (str, optional): Title of the plot. Default is "A LIVE Plot".
-        """
+        """Initialize the plotter with specified channels and plot parameters."""
         self.data_queue = Queue()
         self.title = title
         self.xlabel = xlabel 
         self.ylabel = ylabel
         self.channels = channels
         self.max_points = max_points
+        
+        # Get colors from Bokeh's Spectral palette
+        num_colors = max(11, len(channels))
+        self.colors = Spectral11[:len(channels)]
         
         self.plot_data = {
             channel: {
@@ -60,20 +59,23 @@ class SimpleLivePlotter:
         self.fig = figure(title=self.title, x_axis_label=self.xlabel, y_axis_label=self.ylabel)
         self.fig.grid.grid_line_alpha = 0.3
 
-        for channel in self.channels:
+        # Create plot lines with unique colors
+        for i, channel in enumerate(self.channels):
             self.plot_lines[channel] = self.fig.line(
-                'x', 'y', source=self.sources[channel], legend_label=channel
+                'x', 'y', 
+                source=self.sources[channel], 
+                legend_label=channel,
+                line_color=self.colors[i],
+                line_width=2
             )
         self.fig.legend.location = "top_left"
+        self.fig.legend.click_policy = "hide"
 
         self.server = None
+        self.browser_opened = False
 
     def _update_plot(self):
-        """Update the plot with new data.
-
-        This function updates the plot with new data points from the data queue.
-        It retrieves data for each channel and updates the corresponding plot line.
-        """
+        """Update the plot with new data."""
         while not self.data_queue.empty():
             channel, x, y = self.data_queue.get()
             self.plot_data[channel]["x"].append(x)
@@ -82,80 +84,45 @@ class SimpleLivePlotter:
                 'x': list(self.plot_data[channel]["x"]),
                 'y': list(self.plot_data[channel]["y"])
             }
-        print("Plot updated.")
 
-    def _plot_worker(self):
-        """Worker function to run the plot in a separate thread.
-
-        This function starts a Bokeh server and adds periodic callbacks to update
-        the plot at regular intervals.
-        """
-        self.running = True
-        curdoc().add_periodic_callback(self._update_plot, 50)  # Update every 50ms
-        print("Bokeh server started.")
+    def _open_browser(self):
+        """Open the web browser after a short delay to ensure server is ready."""
+        time.sleep(1)
+        webbrowser.open("http://localhost:5006")
+        self.browser_opened = True
 
     def start(self) -> None:
-        """Start the plotter in its own thread, and initialize the server if needed.
-
-        This function starts a background thread to handle plotting and, if necessary,
-        starts a Bokeh server to serve the plot.
-
-        Args:
-            None
-        """
-        if not self.plot_thread:
-            self.plot_thread = threading.Thread(target=self._plot_worker, daemon=True)
-            self.plot_thread.start()
-
+        """Start the plotter and open in browser."""
         if not self.server:
-            self.server = Server({'/': self.bkapp}, port=5006)
+            self.server = Server({'/': self.bkapp})
             self.server.start()
-            print("Bokeh server running on http://localhost:5006")
+            
+            # Open browser in a separate thread
+            if not self.browser_opened:
+                browser_thread = threading.Thread(target=self._open_browser, daemon=True)
+                browser_thread.start()
 
     def bkapp(self, doc):
-        """Bokeh server app to run the plot.
-
-        This function is used as the Bokeh application to render the plot in the
-        Bokeh server. It adds the figure to the document and starts the plot updates.
-
-        Args:
-            doc (bokeh.document): The Bokeh document to add the figure to.
-        """
-        # Add the figure to the document
+        """Bokeh server app to run the plot."""
         doc.add_root(self.fig)
-        # Ensure the data source is initialized before starting the plot updates
-        doc.add_periodic_callback(self._update_plot, 509)  # Update every 500ms
-        self.start()
+        doc.add_periodic_callback(self._update_plot, 50)
+        
+        if not self.running:
+            self.running = True
+            if not self.plot_thread:
+                self.plot_thread = threading.Thread(target=self._update_plot, daemon=True)
+                self.plot_thread.start()
 
     def update(self, channel: str, x: float, y: float) -> None:
-        """Add new data to the queue.
-
-        This function adds new data for a specific channel to the data queue for
-        plotting.
-
-        Args:
-            channel (str): The channel to which the data belongs.
-            x (float): The x-value (timestamp or measurement).
-            y (float): The y-value (data point).
-        """
+        """Add new data to the queue."""
         if channel in self.channels:
             self.data_queue.put((channel, x, y))
-            print(f"Data updated for channel {channel}: ({x}, {y})")
 
     def stop(self) -> None:
-        """Stop the plot and clean up resources.
-
-        This function stops the Bokeh server and cleans up any resources associated
-        with the plotter.
-
-        Args:
-            None
-        """
+        """Stop the plot and clean up resources."""
         self.running = False
         if self.server:
             self.server.stop()
-            print("Bokeh server stopped.")
-        print("Plot stopped.")
 
 
 
