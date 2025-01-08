@@ -22,44 +22,16 @@ from collections import deque
 from typing import List, Dict, Any, Tuple
 
 class SimpleLivePlotter:
-    """A real-time data plotting class using matplotlib.
-    
-    This class implements a thread-safe live plotting system that can handle
-    multiple data channels simultaneously. It runs the plot in a separate thread
-    to prevent blocking the main execution thread. Cost much of my sanity to make.
-    
-    Attributes:
-        channels: List of channel names to plot.
-        datasavers: Dictionary of data saving objects.
-        max_points: Maximum number of points to keep in memory.
-        xlabel: Label for x-axis.
-        ylabel: Label for y-axis.
-        title: Plot title.
-    """
-    
     def __init__(
         self,
         channels: List[str],
         datasavers: Dict[str, Any],
-        max_points: int = 16384,
+        max_points: int = 1000,
         xlabel: str = "X-AXIS",
         ylabel: str = "Y-AXIS",
         title: str = "A LIVE Plot"
     ):
-        """Initialize the live plotter.
-        
-        Args:
-            channels: List of channel names to plot.
-            datasavers: Dictionary of data saving objects.
-            max_points: Maximum number of points to keep in memory per channel.
-            xlabel: Label for x-axis.
-            ylabel: Label for y-axis.
-            title: Plot title.
-        """
-        # Queue for thread-safe data transfer
         self.data_queue = Queue()
-        
-        # Plot configuration
         self.title = title
         self.xlabel = xlabel 
         self.ylabel = ylabel
@@ -67,7 +39,6 @@ class SimpleLivePlotter:
         self.datasavers = datasavers
         self.max_points = max_points
         
-        # Data storage using deques with max length for memory management
         self.plot_data = {
             channel: {
                 "x": deque(maxlen=max_points),
@@ -76,27 +47,22 @@ class SimpleLivePlotter:
             for channel in channels
         }
         
-        # Plot objects
         self.fig = None
         self.ax = None
         self.plot_lines = {}
         self.plot_start_time = time.time()
         self.running = False
         self.animation = None
-        self.plot_thread = None
+        self.plot_thread = None  # Thread for running the plot
 
     def setup_plot(self) -> None:
-        """Initialize the matplotlib plot with basic configuration.
-        
-        Creates figure, axes, and line objects for each channel.
-        """
+        """Initialize the plot."""
         self.fig, self.ax = plt.subplots(figsize=(10, 6))
         self.ax.set_title(self.title)
         self.ax.set_xlabel(self.xlabel)
         self.ax.set_ylabel(self.ylabel)
         self.ax.grid(True)
         
-        # Create empty line objects for each channel
         for channel in self.channels:
             line, = self.ax.plot([], [], label=channel)
             self.plot_lines[channel] = line
@@ -104,27 +70,14 @@ class SimpleLivePlotter:
         self.ax.legend()
 
     def _plot_worker(self):
-        """Worker function that runs in a separate thread to handle plotting.
-        
-        Sets up the plot and animation, then starts the matplotlib event loop.
-        The animation continuously updates with new data from the queue.
-        """
+        """Worker function to run the plot in a separate thread."""
         self.setup_plot()
         self.running = True
         
         def animate(frame):
-            """Animation function called by FuncAnimation.
-            
-            Args:
-                frame: Frame number (unused but required by FuncAnimation)
-            
-            Returns:
-                List of updated line objects for blitting optimization.
-            """
             if not self.running:
                 return []
                 
-            # Process all available data in queue
             while not self.data_queue.empty():
                 channel, x, y = self.data_queue.get()
                 self.plot_data[channel]["x"].append(x)
@@ -133,43 +86,32 @@ class SimpleLivePlotter:
                     list(self.plot_data[channel]["x"]),
                     list(self.plot_data[channel]["y"])
                 )
-            
-            # Update plot limits
+
             self.ax.relim()
             self.ax.autoscale_view()
             return list(self.plot_lines.values())
-            
-        # Create animation that updates every 50ms
+
         self.animation = FuncAnimation(
             self.fig, 
             animate,
             interval=50,
             blit=True
         )
-        plt.show()
+        plt.show()  # Blocking call; handles GUI event loop
 
     def start(self) -> None:
-        """Start the plotting thread if not already running."""
+        """Start the plotter in its own thread."""
         if not self.plot_thread:
             self.plot_thread = threading.Thread(target=self._plot_worker, daemon=True)
             self.plot_thread.start()
 
     def update(self, channel: str, x: float, y: float) -> None:
-        """Add new data point to the specified channel's plot.
-        
-        Args:
-            channel: Name of the channel to update.
-            x: X-coordinate of the new data point.
-            y: Y-coordinate of the new data point.
-        """
+        """Add new data to the queue."""
         if channel in self.channels:
             self.data_queue.put((channel, x, y))
 
     def stop(self) -> None:
-        """Stop the plotting thread and clean up resources.
-        
-        Stops the animation, closes the plot window, and joins the plotting thread.
-        """
+        """Stop the plot and clean up resources."""
         self.running = False
         if self.animation:
             self.animation.event_source.stop()
@@ -179,7 +121,6 @@ class SimpleLivePlotter:
         if self.plot_thread:
             self.plot_thread.join()
             self.plot_thread = None
-
 # class ParameterWidget(Widget):
 #     def __init__(self, param):
 #         super().__init__()
