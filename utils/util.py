@@ -1,27 +1,24 @@
+from bokeh.plotting import figure, curdoc
+from bokeh.models import ColumnDataSource
+from bokeh.server.server import Server
 import pyvisa
-from qcodes.dataset import plot_dataset
 from qcodes.instrument import VisaInstrument
-from qcodes.parameters import ParameterBase
-from textual.app import ComposeResult
-from textual.containers import Horizontal
-from textual.events import Compose
-from textual.widget import Widget
-from textual.widgets import Collapsible, Input, OptionList, Pretty, Select, Static, Switch
-from utils.drivers.Lakeshore_336 import LakeshoreModel336
-from utils.drivers.Keithley_2450 import Keithley2450
-from textual.reactive import reactive
-from typing import Optional
+from textual.widgets import OptionList, Select
+from typing import Optional, Dict, List, Any
 import time
-from typing import Dict, List, Any, Callable, Optional
-
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 from queue import Queue
 import threading
 from collections import deque
-from typing import List, Dict, Any, Tuple
+from utils.drivers.Lakeshore_336 import LakeshoreModel336
+from utils.drivers.Keithley_2450 import Keithley2450
 
 class SimpleLivePlotter:
+    """Real-time data plotter using Bokeh for external GUI.
+
+    This class allows plotting real-time data using Bokeh, updating the plot
+    periodically as new data is received.
+    """
+
     def __init__(
         self,
         channels: List[str],
@@ -31,6 +28,16 @@ class SimpleLivePlotter:
         ylabel: str = "Y-AXIS",
         title: str = "A LIVE Plot"
     ):
+        """Initialize the plotter with specified channels, datasavers, and plot parameters.
+
+        Args:
+            channels (List[str]): A list of channels to plot.
+            datasavers (Dict[str, Any]): A dictionary of datasavers associated with each channel.
+            max_points (int, optional): Maximum number of data points to plot per channel. Default is 1000.
+            xlabel (str, optional): Label for the X-axis. Default is "X-AXIS".
+            ylabel (str, optional): Label for the Y-axis. Default is "Y-AXIS".
+            title (str, optional): Title of the plot. Default is "A LIVE Plot".
+        """
         self.data_queue = Queue()
         self.title = title
         self.xlabel = xlabel 
@@ -46,81 +53,115 @@ class SimpleLivePlotter:
             }
             for channel in channels
         }
-        
-        self.fig = None
-        self.ax = None
+
         self.plot_lines = {}
         self.plot_start_time = time.time()
         self.running = False
-        self.animation = None
-        self.plot_thread = None  # Thread for running the plot
-
-    def setup_plot(self) -> None:
-        """Initialize the plot."""
-        self.fig, self.ax = plt.subplots(figsize=(10, 6))
-        self.ax.set_title(self.title)
-        self.ax.set_xlabel(self.xlabel)
-        self.ax.set_ylabel(self.ylabel)
-        self.ax.grid(True)
+        self.plot_thread = None
+        self.sources = {channel: ColumnDataSource(data=dict(x=[], y=[])) for channel in channels}
         
+        self.fig = figure(title=self.title, x_axis_label=self.xlabel, y_axis_label=self.ylabel)
+        self.fig.grid.grid_line_alpha = 0.3
+
         for channel in self.channels:
-            line, = self.ax.plot([], [], label=channel)
-            self.plot_lines[channel] = line
-            
-        self.ax.legend()
+            self.plot_lines[channel] = self.fig.line(
+                'x', 'y', source=self.sources[channel], legend_label=channel
+            )
+        self.fig.legend.location = "top_left"
+
+        self.server = None
+
+    def _update_plot(self):
+        """Update the plot with new data.
+
+        This function updates the plot with new data points from the data queue.
+        It retrieves data for each channel and updates the corresponding plot line.
+        """
+        while not self.data_queue.empty():
+            channel, x, y = self.data_queue.get()
+            self.plot_data[channel]["x"].append(x)
+            self.plot_data[channel]["y"].append(y)
+            self.sources[channel].data = {
+                'x': list(self.plot_data[channel]["x"]),
+                'y': list(self.plot_data[channel]["y"])
+            }
+        print("Plot updated.")
 
     def _plot_worker(self):
-        """Worker function to run the plot in a separate thread."""
-        self.setup_plot()
+        """Worker function to run the plot in a separate thread.
+
+        This function starts a Bokeh server and adds periodic callbacks to update
+        the plot at regular intervals.
+        """
         self.running = True
-        
-        def animate(frame):
-            if not self.running:
-                return []
-                
-            while not self.data_queue.empty():
-                channel, x, y = self.data_queue.get()
-                self.plot_data[channel]["x"].append(x)
-                self.plot_data[channel]["y"].append(y)
-                self.plot_lines[channel].set_data(
-                    list(self.plot_data[channel]["x"]),
-                    list(self.plot_data[channel]["y"])
-                )
-
-            self.ax.relim()
-            self.ax.autoscale_view()
-            return list(self.plot_lines.values())
-
-        self.animation = FuncAnimation(
-            self.fig, 
-            animate,
-            interval=50,
-            blit=True
-        )
-        plt.show()  # Blocking call; handles GUI event loop
+        curdoc().add_periodic_callback(self._update_plot, 50)  # Update every 50ms
+        print("Bokeh server started.")
 
     def start(self) -> None:
-        """Start the plotter in its own thread."""
+        """Start the plotter in its own thread, and initialize the server if needed.
+
+        This function starts a background thread to handle plotting and, if necessary,
+        starts a Bokeh server to serve the plot.
+
+        Args:
+            None
+        """
         if not self.plot_thread:
             self.plot_thread = threading.Thread(target=self._plot_worker, daemon=True)
             self.plot_thread.start()
 
+        if not self.server:
+            self.server = Server({'/': self.bkapp}, port=5006)
+            self.server.start()
+            print("Bokeh server running on http://localhost:5006")
+
+    def bkapp(self, doc):
+        """Bokeh server app to run the plot.
+
+        This function is used as the Bokeh application to render the plot in the
+        Bokeh server. It adds the figure to the document and starts the plot updates.
+
+        Args:
+            doc (bokeh.document): The Bokeh document to add the figure to.
+        """
+        # Add the figure to the document
+        doc.add_root(self.fig)
+        # Ensure the data source is initialized before starting the plot updates
+        doc.add_periodic_callback(self._update_plot, 509)  # Update every 500ms
+        self.start()
+
     def update(self, channel: str, x: float, y: float) -> None:
-        """Add new data to the queue."""
+        """Add new data to the queue.
+
+        This function adds new data for a specific channel to the data queue for
+        plotting.
+
+        Args:
+            channel (str): The channel to which the data belongs.
+            x (float): The x-value (timestamp or measurement).
+            y (float): The y-value (data point).
+        """
         if channel in self.channels:
             self.data_queue.put((channel, x, y))
+            print(f"Data updated for channel {channel}: ({x}, {y})")
 
     def stop(self) -> None:
-        """Stop the plot and clean up resources."""
+        """Stop the plot and clean up resources.
+
+        This function stops the Bokeh server and cleans up any resources associated
+        with the plotter.
+
+        Args:
+            None
+        """
         self.running = False
-        if self.animation:
-            self.animation.event_source.stop()
-        if self.fig:
-            plt.close(self.fig)
-            self.fig = None
-        if self.plot_thread:
-            self.plot_thread.join()
-            self.plot_thread = None
+        if self.server:
+            self.server.stop()
+            print("Bokeh server stopped.")
+        print("Plot stopped.")
+
+
+
 # class ParameterWidget(Widget):
 #     def __init__(self, param):
 #         super().__init__()
