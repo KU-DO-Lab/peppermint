@@ -27,11 +27,10 @@ class SimpleLivePlotter:
         ylabel: str = "Y-AXIS",
         title: str = "A LIVE Plot"
     ):
-        """Initialize the plotter with specified channels, datasavers, and plot parameters.
+        """Initialize the plotter with specified channels and plot parameters.
 
         Args:
             channels (List[str]): A list of channels to plot.
-            datasavers (Dict[str, Any]): A dictionary of datasavers associated with each channel.
             max_points (int, optional): Maximum number of data points to plot per channel. Default is 1000.
             xlabel (str, optional): Label for the X-axis. Default is "X-AXIS".
             ylabel (str, optional): Label for the Y-axis. Default is "Y-AXIS".
@@ -42,7 +41,6 @@ class SimpleLivePlotter:
         self.xlabel = xlabel 
         self.ylabel = ylabel
         self.channels = channels
-        self.datasavers = datasavers
         self.max_points = max_points
         
         self.plot_data = {
