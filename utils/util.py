@@ -22,7 +22,7 @@ class SimpleLivePlotter:
     def __init__(
         self,
         channels: List[str],
-        max_points: int = 16384,
+        max_points: int = 2^17,
         xlabel: str = "X-AXIS",
         ylabel: str = "Y-AXIS",
         title: str = "A LIVE Plot"
