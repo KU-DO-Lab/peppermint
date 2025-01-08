@@ -3,7 +3,7 @@ from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 import pyvisa
 from qcodes.instrument import VisaInstrument
-from textual.widgets import OptionList, Select
+from textual.widgets import OptionList, Select, Input
 from typing import Optional, Dict, List, Any
 import time
 from queue import Queue
