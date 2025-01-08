@@ -3,6 +3,7 @@ import logging
 import pyvisa
 import argparse
 
+from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from utils.util import *
 from typing import Any, Dict, Generic, Optional
 from dataclasses import dataclass
@@ -517,28 +518,25 @@ class TemperatureScreen(Screen):
         self.get_temperatures()
         self.start_temperature_polling()
 
-    def set_heater_mode(self, mode: str) -> None:
-        match mode: 
-            case "off":
-                ...
-            case "closed_loop":
-                ...
-            case "open_loop":
-                ...
-            case "zone":
-                ...
+    def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
+        channel.mode(mode)
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
+
+        lake = self.allowed_temperature_monitors[0]
+        channel = lake.output_1
 
         if not event.radio_set.id:
             return
 
         # Map RadioSet IDs to their corresponding handling logic
         handlers = {
-            "heater_mode": self.set_heater_mode(str(event.pressed.label)),
-            "output_range": lambda: print(event.pressed.label)
+            "heater_mode": lambda: channel.mode(str(event.pressed.label)),
+            "output_range": lambda: channel.output_range(str(event.pressed.label))
         }
+
+        print(event.pressed.label)
 
         # Call the appropriate handler if the RadioSet ID exists in the map
         handler = handlers.get(event.radio_set.id)
