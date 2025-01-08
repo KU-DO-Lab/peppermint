@@ -516,12 +516,20 @@ class TemperatureScreen(Screen):
         self.get_temperatures()
         self.start_temperature_polling()
 
+        # Temporary config: this will eventually be configured in GUI
+        lake = self.allowed_temperature_monitors[0]
+        channel = lake.output_1
+        channel.input_channel("A")
+        channel.mode("off")
+        channel.output_range("off")
+
+
     def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
         channel.mode(mode)
-        if mode != "off":
-            self.setpoint_field.disabled=False
-        else:
-            self.setpoint_field.disabled=True
+        # if mode != "off":
+        #     self.setpoint_field.disabled=False
+        # else:
+        #     self.setpoint_field.disabled=True
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         lake = self.allowed_temperature_monitors[0]
@@ -548,8 +556,8 @@ class TemperatureScreen(Screen):
 
         # Map RadioSet IDs to their corresponding handling logic
         handlers = {
-            "heater_mode": self.set_heater_mode(channel, mode),
-            "output_range": self.set_output_range(channel, mode)
+            "heater_mode":  lambda: channel.mode(str(event.pressed.label)),
+            "output_range": lambda: channel.output_range(str(event.pressed.label))
         }
 
         print(event.pressed.label)
