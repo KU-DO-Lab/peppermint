@@ -481,7 +481,8 @@ class TemperatureScreen(Screen):
                 ),
                 Horizontal(
                     Static("Output Heater Resistance:", classes="label"),
-                    Input(placeholder="100%", type="number", classes="input-field", id="output-heater-resistance"),
+                    Input(placeholder="25 or 50", type="number", classes="input-field", id="output-heater-resistance"),
+                    Static("ohm", classes="label"),
                     classes="outlined-container"
                 ),
                 classes="centered-widget"
@@ -577,8 +578,6 @@ class TemperatureScreen(Screen):
         print(f"resistance: {channel.output_heater_resistance}")
         print(f"output %: {channel.output}")
 
-        print(event.value)
-
         if not event.input.id:
             return
 
@@ -586,7 +585,7 @@ class TemperatureScreen(Screen):
             "P": lambda: channel.P(float(event.value)),
             "I": lambda: channel.I(float(event.value)),
             "D": lambda: channel.D(float(event.value)),
-            "output-heater-resistance": lambda: channel.output_heater_resistance(float(event.value))
+            "output-heater-resistance": lambda: channel.output_heater_resistance(str(event.value)+"ohm")
         }
 
         handler = handlers.get(str(event.input.id))
