@@ -82,12 +82,12 @@ ManualConnectionDialog {
 }
 
 /*Temperature controller screen*/
-#heater-mode {
+#heater-mode-container {
     width: auto;
     height: auto;
 }
 
-#output-range{
+#output-range-container {
     width: auto;
     height: auto;
 }

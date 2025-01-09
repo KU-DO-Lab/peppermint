@@ -427,6 +427,7 @@ class TemperatureScreen(Screen):
             RadioButton("closed_loop", tooltip="feedback loop (automatic)"), 
             RadioButton("open_loop", tooltip="no feedback loop (manual)"),
             RadioButton("zone", tooltip="Not yet implemented", disabled=True),
+            id="heater-mode",
         )
 
         output_range = RadioSet(
@@ -434,6 +435,7 @@ class TemperatureScreen(Screen):
             RadioButton("low"), 
             RadioButton("medium"), 
             RadioButton("high"),
+            id="output-range",
         )
 
         self.status_table = Container(
@@ -462,8 +464,8 @@ class TemperatureScreen(Screen):
                 ),
                 Vertical(
                     Horizontal(
-                        Vertical( Static("Heater Mode:    ", classes="label"), heater_mode, id="heater-mode" ),
-                        Vertical( Static("Output Range:    ", classes="label"), output_range, id="output-range" ),
+                        Vertical( Static("Heater Mode:    ", classes="label"), heater_mode, id="heater-mode-container" ),
+                        Vertical( Static("Output Range:    ", classes="label"), output_range, id="output-range-container" ),
                         classes="temperature-controller-controls",
                     ),
                     Horizontal( 
@@ -520,8 +522,12 @@ class TemperatureScreen(Screen):
         lake = self.allowed_temperature_monitors[0]
         channel = lake.output_1
         channel.input_channel("A")
-        channel.mode("off")
-        channel.output_range("off")
+        channel.P(40)
+        channel.I(10)
+        channel.D(0)
+        # channel.mode("off")
+        # channel.output_range("off")
+        # channel.print_readable_snapshot()
 
 
     def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
@@ -542,30 +548,37 @@ class TemperatureScreen(Screen):
             channel.setpoint(float(self.setpoint_field.value))
 
 
+    def set_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
+        channel.mode(mode)
+
     def set_output_range(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
         channel.output_range(mode)
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
 
+        # Hacky: in the future we'd need to select channel to adjust
         lake = self.allowed_temperature_monitors[0]
         channel = lake.output_1
-
+        
+        # print(event.radio_set.id)       
         if not event.radio_set.id:
             return
 
         # Map RadioSet IDs to their corresponding handling logic
         handlers = {
-            "heater_mode":  lambda: channel.mode(str(event.pressed.label)),
-            "output_range": lambda: channel.output_range(str(event.pressed.label))
+            "heater-mode": self.set_mode,
+            "output-range": self.set_output_range
         }
 
-        print(event.pressed.label)
-
         # Call the appropriate handler if the RadioSet ID exists in the map
-        handler = handlers.get(event.radio_set.id)
+        handler = handlers.get(str(event.radio_set.id))
         if handler:
-            handler()
+            # print(handler)
+            handler(channel, str(event.pressed.label))
+            
+        channel.print_readable_snapshot()
+
 
     def start_temperature_polling(self) -> None:
         self.start_time = time.time()
