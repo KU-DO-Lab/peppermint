@@ -471,12 +471,11 @@ class TemperatureScreen(Screen):
                     ),
                     classes="centered-widget"
                 ),
-                # CSS BELOW NEEDS FIXED...
                 Vertical( 
                     Static("PID:", classes="label"), 
-                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="short-field", id="P"), classes="container"), 
-                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="short-field", id="I"), classes="container"), 
-                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="short-field", id="D"), classes="container"), 
+                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
+                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
+                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container"), 
                     id="PID-container", 
                     classes="outlined-container" 
                 ),

@@ -125,6 +125,6 @@ ManualConnectionDialog {
     content-align: center middle;
 }
 
-#input-field {
+.input-field {
     width: auto;
 }
