@@ -479,6 +479,11 @@ class TemperatureScreen(Screen):
                     id="PID-container", 
                     classes="outlined-container" 
                 ),
+                Horizontal(
+                    Static("Output Heater Resistance:", classes="label"),
+                    Input(placeholder="100%", type="number", classes="input-field", id="output-heater-resistance"),
+                    classes="outlined-container"
+                ),
                 classes="centered-widget"
             ),
 
@@ -569,6 +574,8 @@ class TemperatureScreen(Screen):
         lake = self.allowed_temperature_monitors[0]
         channel = lake.output_1
         channel.input_channel("A")
+        print(f"resistance: {channel.output_heater_resistance}")
+        print(f"output %: {channel.output}")
 
         print(event.value)
 
@@ -579,6 +586,7 @@ class TemperatureScreen(Screen):
             "P": lambda: channel.P(float(event.value)),
             "I": lambda: channel.I(float(event.value)),
             "D": lambda: channel.D(float(event.value)),
+            "output-heater-resistance": lambda: channel.output_heater_resistance(float(event.value))
         }
 
         handler = handlers.get(str(event.input.id))
@@ -586,11 +594,6 @@ class TemperatureScreen(Screen):
             handler()
 
         channel.print_readable_snapshot()
-
-        
-
-        fields = {"P": ""}
-
 
     def start_temperature_polling(self) -> None:
         self.start_time = time.time()
