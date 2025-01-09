@@ -92,6 +92,13 @@ ManualConnectionDialog {
     height: auto;
 }
 
+#PID-container {
+    width: auto;
+    height: auto;
+    /*padding: 0 1;*/
+    /*min-width: 16;*/
+}
+
 #temperature-controller-select {
     height: 0.25fr;
     min-height: 6;
@@ -118,6 +125,6 @@ ManualConnectionDialog {
     content-align: center middle;
 }
 
-#setpoint-field {
+#input-field {
     width: auto;
 }

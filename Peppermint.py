@@ -413,14 +413,7 @@ class TemperatureScreen(Screen):
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
 
-        # DEBUG
-        lake = self.allowed_temperature_monitors[0]
-        # print(dir(lake.output_1))
-        # print(lake.output_1.mode)
-        # print(lake.output_1.name)
-        # print(lake.output_1.print_readable_snapshot())
-
-        self.setpoint_field = Input(placeholder="...", disabled=False, type="number", id="setpoint-field") # need to check enabled on screen change
+        self.setpoint_field = Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field") # need to check enabled on screen change
 
         heater_mode = RadioSet(
             RadioButton("off", value=True), 
@@ -462,18 +455,30 @@ class TemperatureScreen(Screen):
                     classes="outlined-container", 
                     id="temperature-controller-status",
                 ),
-                Vertical(
-                    Horizontal(
-                        Vertical( Static("Heater Mode:    ", classes="label"), heater_mode, id="heater-mode-container" ),
-                        Vertical( Static("Output Range:    ", classes="label"), output_range, id="output-range-container" ),
-                        classes="temperature-controller-controls",
-                    ),
-                    Horizontal( 
-                        Static("Setpoint:", classes="label"), self.setpoint_field, Static("(K)", classes="label"),
-                        Button("Confirm!", classes="confirmation"),
-                        classes="temperature-controller-controls",
+                Horizontal(
+                    Vertical(
+                        Horizontal(
+                            Vertical( Static("Heater Mode:    ", classes="label"), heater_mode, id="heater-mode-container" ),
+                            Vertical( Static("Output Range:    ", classes="label"), output_range, id="output-range-container" ),
+                            classes="temperature-controller-controls",
+                        ),
+                        Horizontal( 
+                            Static("Setpoint:", classes="label"), self.setpoint_field, Static("(K)", classes="label"),
+                            Button("Confirm!", classes="confirmation"),
+                            classes="temperature-controller-controls",
+                        ),
+                        classes="centered-widget"
                     ),
                     classes="centered-widget"
+                ),
+                # CSS BELOW NEEDS FIXED...
+                Vertical( 
+                    Static("PID:", classes="label"), 
+                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="short-field", id="P"), classes="container"), 
+                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="short-field", id="I"), classes="container"), 
+                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="short-field", id="D"), classes="container"), 
+                    id="PID-container", 
+                    classes="outlined-container" 
                 ),
                 classes="centered-widget"
             ),
@@ -518,28 +523,11 @@ class TemperatureScreen(Screen):
         self.get_temperatures()
         self.start_temperature_polling()
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
         # Temporary config: this will eventually be configured in GUI
         lake = self.allowed_temperature_monitors[0]
         channel = lake.output_1
         channel.input_channel("A")
-        channel.P(40)
-        channel.I(10)
-        channel.D(0)
-        # channel.mode("off")
-        # channel.output_range("off")
-        # channel.print_readable_snapshot()
-
-
-    def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
-        channel.mode(mode)
-        # if mode != "off":
-        #     self.setpoint_field.disabled=False
-        # else:
-        #     self.setpoint_field.disabled=True
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        lake = self.allowed_temperature_monitors[0]
-        channel = lake.output_1
 
         if self.setpoint_field.value == "":
             return
@@ -547,8 +535,7 @@ class TemperatureScreen(Screen):
         if not self.setpoint_field.disabled:
             channel.setpoint(float(self.setpoint_field.value))
 
-
-    def set_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
+    def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
         channel.mode(mode)
 
     def set_output_range(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
@@ -557,17 +544,17 @@ class TemperatureScreen(Screen):
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
 
-        # Hacky: in the future we'd need to select channel to adjust
+        # Temporary config: this will eventually be configured in GUI
         lake = self.allowed_temperature_monitors[0]
         channel = lake.output_1
+        channel.input_channel("A")
         
-        # print(event.radio_set.id)       
         if not event.radio_set.id:
             return
 
         # Map RadioSet IDs to their corresponding handling logic
         handlers = {
-            "heater-mode": self.set_mode,
+            "heater-mode": self.set_heater_mode,
             "output-range": self.set_output_range
         }
 
@@ -578,6 +565,32 @@ class TemperatureScreen(Screen):
             handler(channel, str(event.pressed.label))
             
         channel.print_readable_snapshot()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        lake = self.allowed_temperature_monitors[0]
+        channel = lake.output_1
+        channel.input_channel("A")
+
+        print(event.value)
+
+        if not event.input.id:
+            return
+
+        handlers = {
+            "P": lambda: channel.P(float(event.value)),
+            "I": lambda: channel.I(float(event.value)),
+            "D": lambda: channel.D(float(event.value)),
+        }
+
+        handler = handlers.get(str(event.input.id))
+        if handler:
+            handler()
+
+        channel.print_readable_snapshot()
+
+        
+
+        fields = {"P": ""}
 
 
     def start_temperature_polling(self) -> None:
