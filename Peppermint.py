@@ -415,7 +415,7 @@ class TemperatureScreen(Screen):
 
         self.setpoint_field = Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field") # need to check enabled on screen change
 
-        heater_mode = RadioSet(
+        self.heater_mode = RadioSet(
             RadioButton("off", value=True), 
             RadioButton("closed_loop", tooltip="feedback loop (automatic)"), 
             RadioButton("open_loop", tooltip="no feedback loop (manual)"),
@@ -423,7 +423,7 @@ class TemperatureScreen(Screen):
             id="heater-mode",
         )
 
-        output_range = RadioSet(
+        self.output_range = RadioSet(
             RadioButton("off", value=True), 
             RadioButton("low"), 
             RadioButton("medium"), 
@@ -438,6 +438,10 @@ class TemperatureScreen(Screen):
             Horizontal(Label("Channel D:    "), self.chD_temperature),
             classes="info"
         )
+        self.p_input = Input(placeholder="...", type="number", classes="input-field", id="P")
+        self.i_input = Input(placeholder="...", type="number", classes="input-field", id="I")
+        self.d_input = Input(placeholder="...", type="number", classes="input-field", id="D")
+
         yield Header()
         yield Vertical(
 
@@ -458,8 +462,8 @@ class TemperatureScreen(Screen):
                 Horizontal(
                     Vertical(
                         Horizontal(
-                            Vertical( Static("Heater Mode:    ", classes="label"), heater_mode, id="heater-mode-container" ),
-                            Vertical( Static("Output Range:    ", classes="label"), output_range, id="output-range-container" ),
+                            Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
+                            Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
                             classes="temperature-controller-controls",
                         ),
                         Horizontal( 
@@ -473,22 +477,22 @@ class TemperatureScreen(Screen):
                 ),
                 Vertical( 
                     Static("PID:", classes="label"), 
-                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
-                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
-                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container"), 
+                    Horizontal(Static("P:", classes="label"), self.p_input, classes="container"), 
+                    Horizontal(Static("I:", classes="label"), self.i_input, classes="container"), 
+                    Horizontal(Static("D:", classes="label"), self.d_input, classes="container"), 
                     id="PID-container", 
                     classes="outlined-container" 
                 ),
-                Horizontal(
-                    Static("Output Heater Resistance:", classes="label"),
-                    Input(placeholder="25 or 50", type="number", classes="input-field", id="output-heater-resistance"),
-                    Static("ohm", classes="label"),
-                    classes="outlined-container"
-                ),
-                classes="centered-widget"
+                # Horizontal(
+                #     Static("Output Heater Resistance:", classes="label"),
+                #     Input(placeholder="25 or 50", type="number", classes="input-field", id="output-heater-resistance"),
+                #     Static("ohm", classes="label"),
+                #     classes="outlined-container"
+                # ),
+                # classes="centered-widget"
             ),
 
-            # Bottom rows: contains visual information
+            # Bottom rows: contains graphic information
             Container(Placeholder()),
             classes="outlined-container",
         )
@@ -525,8 +529,46 @@ class TemperatureScreen(Screen):
             self.app.state.read_parameters.append(param)
         
         self.initialize_measurements()
+        self.populate_fields() # fields like PID, setpoint, heater mode need to be aquired and updated.
         self.get_temperatures()
         self.start_temperature_polling()
+
+    def populate_fields(self) -> None:
+        """Fill in information to the submittable fields when the screen is booted up"""
+        # print(self.output_range.buttons)
+        # print(self.output_range.pressed_index)
+
+        if not self.allowed_temperature_monitors[0]:
+            return
+
+        lake = self.allowed_temperature_monitors[0]
+
+        if lake.full_name == "simulated_lakeshore336":
+            return
+
+        channel = lake.output_1
+        channel.input_channel("A")
+
+        # key/index dictionary for the heater mode and output range:
+        # query a name and use this to pick the corresponding index of the radio set widget
+        heater_modes = {"off": 0, "closed_loop": 1, "open_loop": 2, "zone": 3}
+        output_ranges = {"off": 0, "low": 1, "medium": 2, "high": 3}
+
+        self.setpoint_field = channel.setpoint()
+        # self.heater_mode.pressed_index = int(heater_modes[str(channel.mode)])
+        # self.output_range.pressed_index = int()
+        # self.output_range.Changed(self. output_range, )
+
+        p = self.query_one("#P", Input)
+        self.p_input.value = str(channel.P())
+        self.i_input.value = str(channel.I())
+        self.d_input.value = str(channel.D())
+
+        print(f"setpoint: {channel.setpoint}")
+        print(f"setpoint: {channel.mode}")
+        print(f"setpoint: {channel.P()}")
+        print(f"setpoint: {channel.I()}")
+        print(f"setpoint: {channel.D()}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         # Temporary config: this will eventually be configured in GUI
@@ -566,7 +608,6 @@ class TemperatureScreen(Screen):
         # Call the appropriate handler if the RadioSet ID exists in the map
         handler = handlers.get(str(event.radio_set.id))
         if handler:
-            # print(handler)
             handler(channel, str(event.pressed.label))
             
         channel.print_readable_snapshot()
@@ -585,7 +626,7 @@ class TemperatureScreen(Screen):
             "P": lambda: channel.P(float(event.value)),
             "I": lambda: channel.I(float(event.value)),
             "D": lambda: channel.D(float(event.value)),
-            "output-heater-resistance": lambda: channel.output_heater_resistance(str(event.value)+"ohm")
+            # "output-heater-resistance": lambda: channel.output_heater_resistance(str(event.value)+"ohm")
         }
 
         handler = handlers.get(str(event.input.id))
