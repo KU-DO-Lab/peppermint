@@ -480,6 +480,7 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
                     Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
                     Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container"), 
+                    Horizontal(Static("Manual Output:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="manual-output"), classes="container"), 
                     id="PID-container", 
                     classes="outlined-container" 
                 ),
@@ -555,6 +556,7 @@ class TemperatureScreen(Screen):
         self.query_one("#D", Input).value = str(channel.D())
         self.query_one("#output-percentage", Static).update(str(channel.output()))
         self.query_one("#setpoint-field", Input).value = str(channel.setpoint())
+        self.query_one("#manual-output", Input)
         
         self.get_temperatures()
 
