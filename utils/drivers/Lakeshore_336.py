@@ -243,6 +243,21 @@ class LakeshoreBaseOutput(InstrumentChannel):
         Note that when the heater is off, this parameter will return the value of 0.005.
         """
 
+        self.manual_output: Parameter = self.add_parameter(
+            "manual_output", 
+            label="Manual Output",
+            unit="% of heater range",
+            docstring="Manual Output is a manual setting of the control output. It can function in two differ-"
+            "ent ways depending on control mode. In open loop control mode, the Manual Output "
+            "is the only output to the load. You can directly set the control output from the front "
+            "panel or over the computer interface. In closed loop control mode, Manual Output is "
+            "added directly to the output of the PID control equation. In effect, the control equa-"
+            "tion operates about the Manual Output setting.", 
+            get_parser=float,
+            get_cmd=f"MOUT? {output_index}",
+            set_cmd=f"MOUT {output_index}, {{}}"
+        )
+
         self.setpoint: Parameter = self.add_parameter(
             "setpoint",
             label="Setpoint value (in sensor units)",
