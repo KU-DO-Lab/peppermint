@@ -214,17 +214,6 @@ class ParametersScreen(Screen):
                 doubly_stripped_param_name: str = str(stripped_param_name)[len(submodule_name) + 1:]
                 submodule = instrument.submodules[submodule_name]
                 param: GroupParameter | ParameterBase = submodule.parameters[doubly_stripped_param_name]
-
-                # DEBUGGING, KEEP AROUND
-                # ill never forgive microsoft employees for the crimes they've committed
-                # print(dir(param))
-                # print(param.get)
-                # print(param.gettable)
-                # print(param.get_raw)
-                # print(param.get_latest)
-                # print(f"Parameter type: {type(param)}")
-                # print(f"Parameter mappings: {param.val_mapping if hasattr(param, 'val_mapping') else 'No val_mapping'}")
-                # print(f"Parameter validators: {param.validators if hasattr(param, 'validators') else 'No validators'}")
             else:
                 param: GroupParameter | ParameterBase = instrument.parameters[stripped_param_name]
 
@@ -323,7 +312,7 @@ class TemperatureScreen(Screen):
 
     BINDINGS = [
         ("u", "initialize_plot", "Open Plot"),
-        ("s", "setpoint", "Adjust Setpoint"),
+        # ("s", "setpoint", "Adjust Setpoint"),
     ] 
 
     def __init__(self):
@@ -382,6 +371,23 @@ class TemperatureScreen(Screen):
             # each channel has its own datasaver, I could not get it to operate well pushing everything to one.
             self.measurements[channel] = measurement
             self.datasavers[channel] = measurement.run().__enter__()
+            
+    def poll_temperature_controller(self) -> None:
+        self.get_output_percentage()
+        self.get_temperatures()
+        
+    def get_output_percentage(self) -> None:
+        if not self.allowed_temperature_monitors[0]:
+            return
+        
+        if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
+            return
+
+        lake = self.allowed_temperature_monitors[0]
+        channel = lake.output_1
+        channel.input_channel("A")
+        
+        self.query_one("#output-percentage", Static).update(str(channel.output()))
 
     def get_temperatures(self) -> None:
         """Get and record temperatures for each channel"""
@@ -413,8 +419,6 @@ class TemperatureScreen(Screen):
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
         self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
 
-        self.setpoint_field = Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field") # need to check enabled on screen change
-
         self.heater_mode = RadioSet(
             RadioButton("off", value=True), 
             RadioButton("closed_loop", tooltip="feedback loop (automatic)"), 
@@ -438,13 +442,9 @@ class TemperatureScreen(Screen):
             Horizontal(Label("Channel D:    "), self.chD_temperature),
             classes="info"
         )
-        self.p_input = Input(placeholder="...", type="number", classes="input-field", id="P")
-        self.i_input = Input(placeholder="...", type="number", classes="input-field", id="I")
-        self.d_input = Input(placeholder="...", type="number", classes="input-field", id="D")
 
         yield Header()
         yield Vertical(
-
             # Top row: contains statistics and controls
             Horizontal(
                 Horizontal(
@@ -453,9 +453,9 @@ class TemperatureScreen(Screen):
                     classes="outlined-container",
                     id="temperature-controller-select",
                 ),
-                Horizontal(
-                    Static("Status:    ", classes="label"), 
-                    self.status_table, 
+                Vertical(
+                    Horizontal(Static("Status:    ", classes="label"), self.status_table),
+                    Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label")),
                     classes="outlined-container", 
                     id="temperature-controller-status",
                 ),
@@ -467,7 +467,7 @@ class TemperatureScreen(Screen):
                             classes="temperature-controller-controls",
                         ),
                         Horizontal( 
-                            Static("Setpoint:", classes="label"), self.setpoint_field, Static("(K)", classes="label"),
+                            Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
                             Button("Confirm!", classes="confirmation"),
                             classes="temperature-controller-controls",
                         ),
@@ -477,23 +477,19 @@ class TemperatureScreen(Screen):
                 ),
                 Vertical( 
                     Static("PID:", classes="label"), 
-                    Horizontal(Static("P:", classes="label"), self.p_input, classes="container"), 
-                    Horizontal(Static("I:", classes="label"), self.i_input, classes="container"), 
-                    Horizontal(Static("D:", classes="label"), self.d_input, classes="container"), 
+                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
+                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
+                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container"), 
                     id="PID-container", 
                     classes="outlined-container" 
                 ),
-                # Horizontal(
-                #     Static("Output Heater Resistance:", classes="label"),
-                #     Input(placeholder="25 or 50", type="number", classes="input-field", id="output-heater-resistance"),
-                #     Static("ohm", classes="label"),
-                #     classes="outlined-container"
-                # ),
-                # classes="centered-widget"
+                Horizontal(
+                    classes="outlined-container"
+                ),
+                classes="centered-widget"
             ),
-
             # Bottom rows: contains graphic information
-            Container(Placeholder()),
+            # Container(Placeholder()),
             classes="outlined-container",
         )
         yield Footer()
@@ -530,22 +526,18 @@ class TemperatureScreen(Screen):
         
         self.initialize_measurements()
         self.populate_fields() # fields like PID, setpoint, heater mode need to be aquired and updated.
-        self.get_temperatures()
+        # self.get_temperatures()
         self.start_temperature_polling()
 
     def populate_fields(self) -> None:
         """Fill in information to the submittable fields when the screen is booted up"""
-        # print(self.output_range.buttons)
-        # print(self.output_range.pressed_index)
-
         if not self.allowed_temperature_monitors[0]:
+            return
+        
+        if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
             return
 
         lake = self.allowed_temperature_monitors[0]
-
-        if lake.full_name == "simulated_lakeshore336":
-            return
-
         channel = lake.output_1
         channel.input_channel("A")
 
@@ -554,21 +546,19 @@ class TemperatureScreen(Screen):
         heater_modes = {"off": 0, "closed_loop": 1, "open_loop": 2, "zone": 3}
         output_ranges = {"off": 0, "low": 1, "medium": 2, "high": 3}
 
-        self.setpoint_field = channel.setpoint()
         # self.heater_mode.pressed_index = int(heater_modes[str(channel.mode)])
         # self.output_range.pressed_index = int()
         # self.output_range.Changed(self. output_range, )
 
-        p = self.query_one("#P", Input)
-        self.p_input.value = str(channel.P())
-        self.i_input.value = str(channel.I())
-        self.d_input.value = str(channel.D())
+        self.query_one("#P", Input).value = str(channel.P())
+        self.query_one("#I", Input).value = str(channel.I())
+        self.query_one("#D", Input).value = str(channel.D())
+        self.query_one("#output-percentage", Static).update(str(channel.output()))
+        self.query_one("#setpoint-field", Input).value = str(channel.setpoint())
+        
+        self.get_temperatures()
 
-        print(f"setpoint: {channel.setpoint}")
-        print(f"setpoint: {channel.mode}")
-        print(f"setpoint: {channel.P()}")
-        print(f"setpoint: {channel.I()}")
-        print(f"setpoint: {channel.D()}")
+        print(f"{channel.print_readable_snapshot()}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         # Temporary config: this will eventually be configured in GUI
@@ -638,7 +628,7 @@ class TemperatureScreen(Screen):
     def start_temperature_polling(self) -> None:
         self.start_time = time.time()
         # self.stop_temperature_polling()
-        self.update_timer = self.set_interval(1/self.polling_frequency, self.get_temperatures)
+        self.update_timer = self.set_interval(1/self.polling_frequency, self.poll_temperature_controller)
 
     # def stop_temperature_polling(self) -> None:
     #     """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""

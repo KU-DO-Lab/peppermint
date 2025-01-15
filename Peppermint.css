@@ -111,7 +111,7 @@ ManualConnectionDialog {
 #temperature-controller-status {
     min-width: 35;
     max-width: 35;
-    min-height: 6;
+    min-height: 10;
     height: 0.25fr;
     margin: 2 1;
     width: auto;
