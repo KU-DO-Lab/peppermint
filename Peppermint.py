@@ -426,11 +426,11 @@ class TemperatureScreen(Screen):
 
                 # Update statistics
                 if channel not in self.stats_buffer:
-                    self.stats_buffer[channel] = {"raw_data": []}
+                    self.stats_buffer[channel] = {"raw_data": [], "rms": float("nan"), "std": float("nan"), "gradient": float("nan")}
 
                 self.stats_buffer[channel]["raw_data"].append(value)
-                self.get_statistics(channel)
-                print(self.get_statistics(channel))
+                self.stats_buffer = self.get_statistics(channel)
+                print(self.stats_buffer)
 
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
