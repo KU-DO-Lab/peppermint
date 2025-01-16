@@ -319,27 +319,29 @@ class TemperatureScreen(Screen):
 
     def __init__(self):
         super().__init__()
-        self.polling_frequency = 0.25
+        # self.polling_frequency = 0.25
+        self.polling_interval = 4
         self.update_timer = None
+        self.active_channel = None
  
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
         self.datasavers: Dict[str, Any] = {}
         self.stats_buffer: Dict[str, Dict[str, Any]] = {} # we might want to run continuous statistics over a range of data.
         
-        self.chA_temperature = Static("N/A", id="channel_A")
-        self.chC_temperature = Static("N/A", id="channel_C")
-        self.chB_temperature = Static("N/A", id="channel_B")
-        self.chD_temperature = Static("N/A", id="channel_D")
+        self.chA_temperature_widget = Static("N/A", id="channel_A", classes="inline-label")
+        self.chB_temperature_widget = Static("N/A", id="channel_B", classes="inline-label")
+        self.chC_temperature_widget = Static("N/A", id="channel_C", classes="inline-label")
+        self.chD_temperature_widget = Static("N/A", id="channel_D", classes="inline-label")
 
         # Channel widget mappings
         # C and D are disabled for now since they don't output anything on our system.
         # We really want a switch to enable or disable them.
         self.channel_widgets = {
-            'A': self.chA_temperature,
-            'B': self.chB_temperature,
-            # 'C': self.chC_temperature,
-            # 'D': self.chD_temperature
+            'A': self.chA_temperature_widget,
+            'B': self.chB_temperature_widget,
+            # 'C': self.chC_temperature_widget,
+            # 'D': self.chD_temperature_widget
         }
         
         # Initialize experiments for each channel
@@ -386,8 +388,10 @@ class TemperatureScreen(Screen):
         if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
             return
 
-        lake = self.allowed_temperature_monitors[0]
-        channel = lake.output_1
+        if not self.active_channel:
+            return 
+
+        channel = self.active_channel
         channel.input_channel("A")
         
         self.query_one("#output-percentage", Static).update(str(channel.output()))
@@ -431,14 +435,13 @@ class TemperatureScreen(Screen):
                 self.stats_buffer[channel]["raw_data"].append(value)
                 self.get_statistics(channel)
                 self.stats_buffer[channel].update(self.get_statistics(channel))
-                print(self.stats_buffer)
 
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
 
         rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])**2) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * self.polling_frequency if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
+        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
 
         return {"std": std, "rms": rms, "gradient": gradient}
         
@@ -465,11 +468,11 @@ class TemperatureScreen(Screen):
             id="output-range",
         )
 
-        self.status_table = Container(
-            Horizontal(Label("Channel A:    "), self.chA_temperature),
-            Horizontal(Label("Channel B:    "), self.chB_temperature),
-            Horizontal(Label("Channel C:    "), self.chC_temperature),
-            Horizontal(Label("Channel D:    "), self.chD_temperature),
+        self.status_table = ListView(
+            ListItem(Horizontal(Static("Channel A: ", classes="inline-label"), self.chA_temperature_widget, classes="container"), classes="inline-label", id="listitem-A"),
+            ListItem(Horizontal(Static("Channel B: ", classes="inline-label"), self.chB_temperature_widget, classes="container"), classes="inline-label", id="listitem-B"),
+            ListItem(Horizontal(Static("Channel C: ", classes="inline-label"), self.chC_temperature_widget, classes="container"), classes="inline-label", id="listitem-C"),
+            ListItem(Horizontal(Static("Channel D: ", classes="inline-label"), self.chD_temperature_widget, classes="container"), classes="inline-label", id="listitem-D"),
             classes="info"
         )
 
@@ -583,8 +586,10 @@ class TemperatureScreen(Screen):
             self.get_temperatures(self.fetch_gettable_channels_and_parameters)
             return
 
-        lake = self.allowed_temperature_monitors[0]
-        channel = lake.output_1
+        if not self.active_channel:
+            return 
+
+        channel = self.active_channel
         channel.input_channel("A")
 
         # key/index dictionary for the heater mode and output range:
@@ -609,8 +614,10 @@ class TemperatureScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         # Temporary config: this will eventually be configured in GUI
-        lake = self.allowed_temperature_monitors[0]
-        channel = lake.output_1
+        if not self.active_channel:
+            return 
+
+        channel = self.active_channel
         channel.input_channel("A")
 
         if self.setpoint_field.value == "":
@@ -618,6 +625,29 @@ class TemperatureScreen(Screen):
 
         if not self.setpoint_field.disabled:
             channel.setpoint(float(self.setpoint_field.value))
+
+
+    def change_active_channel(self, channel: str) -> None:
+        lake = self.allowed_temperature_monitors[0]
+        heaters = {
+            "A": lake.output_1,
+            "B": lake.output_2, 
+            "C": lake.output_3,
+            "D": lake.output_4
+        }
+        self.active_channel = heaters[channel]
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        handlers = {
+            "listitem-A": lambda: self.change_active_channel("A"),
+            "listitem-B": lambda: self.change_active_channel("B"),
+            "listitem-C": lambda: self.change_active_channel("C"),
+            "listitem-D": lambda: self.change_active_channel("D")
+        }
+
+        handler = handlers.get(str(event.item.id))
+        if handler:
+            handler()
 
     def set_heater_mode(self, channel: LakeshoreModel336CurrentSource, mode: str) -> None:
         channel.mode(mode)
@@ -627,10 +657,10 @@ class TemperatureScreen(Screen):
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Handle changes in any RadioSet."""
+        if not self.active_channel:
+            return 
 
-        # Temporary config: this will eventually be configured in GUI
-        lake = self.allowed_temperature_monitors[0]
-        channel = lake.output_1
+        channel = self.active_channel
         channel.input_channel("A")
         
         if not event.radio_set.id:
@@ -650,11 +680,11 @@ class TemperatureScreen(Screen):
         channel.print_readable_snapshot()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        lake = self.allowed_temperature_monitors[0]
-        channel = lake.output_1
+        if not self.active_channel:
+            return 
+
+        channel = self.active_channel
         channel.input_channel("A")
-        print(f"resistance: {channel.output_heater_resistance}")
-        print(f"output %: {channel.output}")
 
         if not event.input.id:
             return
@@ -675,7 +705,7 @@ class TemperatureScreen(Screen):
     def start_temperature_polling(self) -> None:
         self.start_time = time.time()
         # self.stop_temperature_polling()
-        self.update_timer = self.set_interval(1/self.polling_frequency, self.poll_temperature_controller)
+        self.update_timer = self.set_interval(self.polling_interval, self.poll_temperature_controller)
 
     def stop_temperature_polling(self) -> None:
         """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
@@ -689,7 +719,6 @@ class TemperatureScreen(Screen):
 
     def action_initialize_plot(self) -> None:
         """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
-        # print("starting plot!")
         self.plotter.start()
 
 class Sweep1DScreen(Screen):

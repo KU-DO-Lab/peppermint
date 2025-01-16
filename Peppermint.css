@@ -14,6 +14,12 @@ ManualConnectionDialog {
     align: center middle;
 }
 
+.inline-label {
+    max-height: 2;
+    /*height: 3; */
+    width: auto;
+}
+
 .field {
     content-align: center middle;
 }
@@ -68,10 +74,6 @@ ManualConnectionDialog {
     height: auto;
 }
 
-.info {
-    content-align: center middle;
-}
-
 /*Parameters Screen*/
 .read {
     color: #00a400;
@@ -109,12 +111,12 @@ ManualConnectionDialog {
 }
 
 #temperature-controller-status {
-    min-width: 35;
-    max-width: 35;
+    /*min-width: 32;*/
+    /*max-width: 32;*/
+    width: 32;
     min-height: 10;
     height: 0.25fr;
     margin: 2 1;
-    width: auto;
 }
 
 .temperature-controller-controls {
