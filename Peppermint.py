@@ -573,6 +573,7 @@ class TemperatureScreen(Screen):
             param: GroupParameter | ParameterBase = submodule.parameters['temperature']
             self.app.state.read_parameters.append(param)
         
+        self.active_channel = self.allowed_temperature_monitors[0].output_1 # set channel "A" active at the start
         self.initialize_measurements()
         self.populate_fields() # fields like PID, setpoint, heater mode need to be aquired and updated.
         self.start_temperature_polling()
@@ -628,6 +629,10 @@ class TemperatureScreen(Screen):
 
 
     def change_active_channel(self, channel: str) -> None:
+        
+        if len(self.allowed_temperature_monitors) <= 0:
+            return
+        
         lake = self.allowed_temperature_monitors[0]
         heaters = {
             "A": lake.output_1,
@@ -636,8 +641,10 @@ class TemperatureScreen(Screen):
             "D": lake.output_4
         }
         self.active_channel = heaters[channel]
+        self.populate_fields()
+        # self.fetch_gettable_channels_and_parameters()
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         handlers = {
             "listitem-A": lambda: self.change_active_channel("A"),
             "listitem-B": lambda: self.change_active_channel("B"),
