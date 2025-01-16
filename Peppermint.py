@@ -429,7 +429,8 @@ class TemperatureScreen(Screen):
                     self.stats_buffer[channel] = {"raw_data": [], "rms": float("nan"), "std": float("nan"), "gradient": float("nan")}
 
                 self.stats_buffer[channel]["raw_data"].append(value)
-                self.stats_buffer = self.get_statistics(channel)
+                self.get_statistics(channel)
+                self.stats_buffer[channel].update(self.get_statistics(channel))
                 print(self.stats_buffer)
 
     def get_statistics(self, channel: str) -> Dict[str, Any]:
@@ -439,11 +440,8 @@ class TemperatureScreen(Screen):
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
         gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * self.polling_frequency if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
 
-        statistics: Dict[str, Any] = {}
-        statistics[channel] = {"std": std, "rms": rms, "gradient": gradient}
+        return {"std": std, "rms": rms, "gradient": gradient}
         
-        return statistics
-
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
         self.allowed_monitor_types = (LakeshoreModel336)
@@ -665,7 +663,7 @@ class TemperatureScreen(Screen):
             "P": lambda: channel.P(float(event.value)),
             "I": lambda: channel.I(float(event.value)),
             "D": lambda: channel.D(float(event.value)),
-            # "output-heater-resistance": lambda: channel.output_heater_resistance(str(event.value)+"ohm")
+            "manual-output": lambda: channel.manual_output(event.value),
         }
 
         handler = handlers.get(str(event.input.id))
