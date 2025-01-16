@@ -444,55 +444,70 @@ class TemperatureScreen(Screen):
         )
 
         yield Header()
-        yield Vertical(
-            # Top row: contains statistics and controls
-            Horizontal(
+        with TabbedContent("Good to Go"):
+            yield Container(
+                # Top row: contains statistics and controls
                 Horizontal(
-                    Static("Temperature Controller:     \n(Currently useless)", classes="label"), 
-                    self.temperature_monitors_select, 
-                    classes="outlined-container",
-                    id="temperature-controller-select",
-                ),
-                Vertical(
-                    Horizontal(Static("Status:    ", classes="label"), self.status_table),
-                    Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label")),
-                    classes="outlined-container", 
-                    id="temperature-controller-status",
-                ),
-                Horizontal(
+                    Horizontal(
+                        Static("Temperature Controller:     \n(Currently useless)", classes="label"), 
+                        self.temperature_monitors_select, 
+                        classes="outlined-container",
+                        id="temperature-controller-select",
+                    ),
                     Vertical(
-                        Horizontal(
-                            Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
-                            Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
-                            classes="temperature-controller-controls",
-                        ),
-                        Horizontal( 
-                            Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
-                            Button("Confirm!", classes="confirmation"),
-                            classes="temperature-controller-controls",
+                        Horizontal(Static("Status:    ", classes="label"), self.status_table),
+                        Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label")),
+                        classes="outlined-container", 
+                        id="temperature-controller-status",
+                    ),
+                    Horizontal(
+                        Vertical(
+                            Horizontal(
+                                Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
+                                Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
+                                classes="temperature-controller-controls",
+                            ),
+                            Horizontal( 
+                                Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
+                                Button("Confirm!", classes="confirmation"),
+                                classes="temperature-controller-controls",
+                            ),
+                            classes="centered-widget"
                         ),
                         classes="centered-widget"
                     ),
+                    Vertical( 
+                        Static("PID:", classes="label"), 
+                        Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
+                        Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
+                        Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container"), 
+                        Horizontal(Static("Manual Output:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="manual-output"), classes="container"), 
+                        id="PID-container", 
+                        classes="outlined-container" 
+                    ),
+                    Horizontal(
+                        classes="outlined-container"
+                    ),
                     classes="centered-widget"
                 ),
-                Vertical( 
-                    Static("PID:", classes="label"), 
-                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
-                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
-                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container"), 
-                    Horizontal(Static("Manual Output:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="manual-output"), classes="container"), 
-                    id="PID-container", 
-                    classes="outlined-container" 
-                ),
+                # Bottom rows: contains graphic information
+                # Container(Placeholder()),
+                classes="outlined-container",
+            )
+            yield Horizontal(
+            Container(
+                Static("Setpoint Dragging:"),
                 Horizontal(
-                    classes="outlined-container"
+                    Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
+                    Horizontal(Static("Target Temperature", classes="label"), Input("...", type="number", classes="input-field", id="dragging-input"), classes="container"),
+                    classes="container",
                 ),
-                classes="centered-widget"
+                Button("Go!", classes="confirmation"),
+                classes="outlined-container",
             ),
-            # Bottom rows: contains graphic information
-            # Container(Placeholder()),
-            classes="outlined-container",
-        )
+                # additional widgets go here
+            Horizontal(classes="container"),
+            )
         yield Footer()
 
     async def on_screen_resume(self) -> None:
