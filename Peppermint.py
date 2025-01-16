@@ -435,9 +435,9 @@ class TemperatureScreen(Screen):
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
 
-        rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
+        rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])**2) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        gradient: float = (self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * self.polling_frequency if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0
+        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * self.polling_frequency if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
 
         statistics: Dict[str, Any] = {}
         statistics[channel] = {"std": std, "rms": rms, "gradient": gradient}
