@@ -2,17 +2,31 @@ from bokeh.plotting import figure, curdoc
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
+from bokeh.models import DatetimeTickFormatter
 import pyvisa
 from qcodes.instrument import VisaInstrument
 from textual.widgets import OptionList, Select, Input
 from typing import Optional, Dict, List, Any
-import time
+import time, datetime
+# from datetime import fromtimestamp
 import webbrowser # to open the bokeh plot automatically without blocking the terminal
 from queue import Queue
 import threading
 from collections import deque
 from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
+
+from bokeh.plotting import figure, show
+from bokeh.io import output_file, push_notebook
+from bokeh.models import ColumnDataSource
+from bokeh.palettes import Spectral11
+from queue import Queue
+from collections import deque
+import time
+import threading
+import webbrowser
+import datetime
+from typing import List
 
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
@@ -28,20 +42,22 @@ class SimpleLivePlotter:
         max_points: int = 2**16,
         xlabel: str = "X-AXIS",
         ylabel: str = "Y-AXIS",
-        title: str = "A LIVE Plot"
+        title: str = "A LIVE Plot",
+        use_timestamps: bool = False
     ):
         """Initialize the plotter with specified channels and plot parameters."""
         self.data_queue = Queue()
         self.title = title
-        self.xlabel = xlabel 
+        self.xlabel = xlabel
         self.ylabel = ylabel
         self.channels = channels
         self.max_points = max_points
-        
+        self.use_timestamps = use_timestamps  # Flag to control x-axis format
+
         # Get colors from Bokeh's Spectral palette
         num_colors = max(11, len(channels))
         self.colors = Spectral11[:len(channels)]
-        
+
         self.plot_data = {
             channel: {
                 "x": deque(maxlen=max_points),
@@ -55,15 +71,15 @@ class SimpleLivePlotter:
         self.running = False
         self.plot_thread = None
         self.sources = {channel: ColumnDataSource(data=dict(x=[], y=[])) for channel in channels}
-        
-        self.fig = figure(title=self.title, x_axis_label=self.xlabel, y_axis_label=self.ylabel)
+
+        self.fig = figure(title=self.title, x_axis_label=self.xlabel, y_axis_label=self.ylabel, x_axis_type="datetime" if self.use_timestamps else "linear")
         self.fig.grid.grid_line_alpha = 0.3
 
         # Create plot lines with unique colors
         for i, channel in enumerate(self.channels):
             self.plot_lines[channel] = self.fig.line(
-                'x', 'y', 
-                source=self.sources[channel], 
+                'x', 'y',
+                source=self.sources[channel],
                 legend_label=channel,
                 line_color=self.colors[i],
                 line_width=2
@@ -78,6 +94,9 @@ class SimpleLivePlotter:
         """Update the plot with new data."""
         while not self.data_queue.empty():
             channel, x, y = self.data_queue.get()
+            if self.use_timestamps:
+                # Convert x to a timestamp if use_timestamps is enabled
+                x = datetime.datetime.fromtimestamp(x)
             self.plot_data[channel]["x"].append(x)
             self.plot_data[channel]["y"].append(y)
             self.sources[channel].data = {

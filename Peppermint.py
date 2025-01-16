@@ -1,7 +1,9 @@
 import os
 import logging
+from numpy._core.numerictypes import floating
 import pyvisa
 import argparse
+import numpy as np
 
 from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from utils.util import *
@@ -319,11 +321,11 @@ class TemperatureScreen(Screen):
         super().__init__()
         self.polling_frequency = 0.25
         self.update_timer = None
-        self.start_time = time.time()
  
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
         self.datasavers: Dict[str, Any] = {}
+        self.stats_buffer: Dict[str, Dict[str, Any]] = {} # we might want to run continuous statistics over a range of data.
         
         self.chA_temperature = Static("N/A", id="channel_A")
         self.chC_temperature = Static("N/A", id="channel_C")
@@ -353,6 +355,7 @@ class TemperatureScreen(Screen):
             title="Automated Temperature Monitor",
             xlabel="time (s)",
             ylabel="temperature (k)",
+            use_timestamps=True,
         )
 
     def initialize_measurements(self) -> None:
@@ -374,7 +377,7 @@ class TemperatureScreen(Screen):
             
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
-        self.get_temperatures()
+        self.get_temperatures(self.fetch_gettable_channels_and_parameters)
         
     def get_output_percentage(self) -> None:
         if not self.allowed_temperature_monitors[0]:
@@ -389,15 +392,23 @@ class TemperatureScreen(Screen):
         
         self.query_one("#output-percentage", Static).update(str(channel.output()))
 
-    def get_temperatures(self) -> None:
-        """Get and record temperatures for each channel"""
-
+    def fetch_gettable_channels_and_parameters(self) -> Dict[str, ParameterBase]:
+        """Return the parameter to get each temperature from."""
+        channels_to_get = {}
         for param in self.app.state.read_parameters:
             if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
                 continue
-                
-            channel = param.name_parts[1] # Extract channel label (A, B, C, D)            
 
+            channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
+            channels_to_get[channel] = param  # Map the channel label to the parameter
+        
+        return channels_to_get
+
+    def get_temperatures(self, fetch_channels_function) -> None:
+        """Get and record temperatures for each channel."""
+
+        things_to_get: Dict[str, ParameterBase] = fetch_channels_function()
+        for channel, param in things_to_get.items():
             # Update widget
             if channel in self.channel_widgets:
                 value = param.get()
@@ -408,9 +419,30 @@ class TemperatureScreen(Screen):
                 if channel in self.datasavers and self.datasavers[channel]:
                     self.datasavers[channel].add_result( (param, value) )
 
+                # Update the plot
                 if self.plotter:
-                    current_time = time.time() - self.start_time
+                    current_time = time.time()
                     self.plotter.update(channel, x=current_time, y=value)
+
+                # Update statistics
+                if channel not in self.stats_buffer:
+                    self.stats_buffer[channel] = {"raw_data": []}
+
+                self.stats_buffer[channel]["raw_data"].append(value)
+                self.get_statistics(channel)
+                print(self.get_statistics(channel))
+
+    def get_statistics(self, channel: str) -> Dict[str, Any]:
+        """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
+
+        rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
+        std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
+        gradient: float = (self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * self.polling_frequency if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0
+
+        statistics: Dict[str, Any] = {}
+        statistics[channel] = {"std": std, "rms": rms, "gradient": gradient}
+        
+        return statistics
 
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
@@ -500,9 +532,9 @@ class TemperatureScreen(Screen):
                 Horizontal(
                     Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
                     Horizontal(Static("Target Temperature", classes="label"), Input("...", type="number", classes="input-field", id="dragging-input"), classes="container"),
+                    Button("Go!", classes="confirmation"),
                     classes="container",
                 ),
-                Button("Go!", classes="confirmation"),
                 classes="outlined-container",
             ),
                 # additional widgets go here
@@ -542,7 +574,6 @@ class TemperatureScreen(Screen):
         
         self.initialize_measurements()
         self.populate_fields() # fields like PID, setpoint, heater mode need to be aquired and updated.
-        # self.get_temperatures()
         self.start_temperature_polling()
 
     def populate_fields(self) -> None:
@@ -551,6 +582,7 @@ class TemperatureScreen(Screen):
             return
         
         if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
+            self.get_temperatures(self.fetch_gettable_channels_and_parameters)
             return
 
         lake = self.allowed_temperature_monitors[0]
@@ -573,7 +605,7 @@ class TemperatureScreen(Screen):
         self.query_one("#setpoint-field", Input).value = str(channel.setpoint())
         self.query_one("#manual-output", Input)
         
-        self.get_temperatures()
+        self.get_temperatures(self.fetch_gettable_channels_and_parameters)
 
         print(f"{channel.print_readable_snapshot()}")
 
@@ -647,11 +679,15 @@ class TemperatureScreen(Screen):
         # self.stop_temperature_polling()
         self.update_timer = self.set_interval(1/self.polling_frequency, self.poll_temperature_controller)
 
-    # def stop_temperature_polling(self) -> None:
-    #     """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
-    #     if self.update_timer:
-    #         self.update_timer.stop()
-    #     self.plotter.stop()
+    def stop_temperature_polling(self) -> None:
+        """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
+        if self.update_timer:
+            self.update_timer.stop()
+        self.plotter.stop()
+
+    def cleanup_all(self) -> None:
+        self.stop_temperature_polling()
+        self.plotter.stop()
 
     def action_initialize_plot(self) -> None:
         """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
@@ -753,6 +789,10 @@ class Peppermint(App):
     def on_mount(self) -> None:
         self.push_screen('main_screen')
         initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
+
+    async def on_exit(self):
+        # Perform cleanup tasks here
+        print("Application is exiting. Performing cleanup...")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Peppermint")
