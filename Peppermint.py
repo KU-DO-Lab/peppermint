@@ -653,28 +653,37 @@ class TemperatureScreen(Screen):
         self.is_dragging = False
 
     def guess_next_setpoint_for_dragging(self, stop, threshold, target_gradient: float, p: float, i: float, d: float) -> float:
-        """Guess the next setpoint when using the 'setpoint dragging' feature. 
+        """Guess the next setpoint when using the 'setpoint dragging' feature.
 
-        The problem here is to decide on an algorithm to choose where to pick the next setpoint between the current temperature and future temperature. 
-        This approach tries to "hone in" the target decent rate by use of the PID algorithm.
+        This implementation uses a PID algorithm to adjust the setpoint for maintaining a steady descent rate.
         """
-
-        channel_mapping={"output_1": "A", "output_2": "B", "output_3": "C", "output_4": "D"}
+        channel_mapping = {"output_1": "A", "output_2": "B", "output_3": "C", "output_4": "D"}
         channel: str | None = channel_mapping.get(self.active_channel.name_parts[-1])
         if not channel:
-            self.notify("something went wrong, channel not found for setpoint dragging!")
+            self.notify("Something went wrong, channel not found for setpoint dragging!")
             self.stop_setpoint_dragging()
             return stop
 
-        error = self.stats_buffer[channel]["gradient"]
-        integral = self.stats_buffer[channel]["raw_data"][-1]
-        derivative = self.stats_buffer[channel]["acceleration"]
-        output = p * error + i * integral + d * derivative
+        # Fetch required values from stats_buffer
+        current_gradient = self.stats_buffer[channel]["gradient"]
+        current_setpoint = self.stats_buffer[channel]["raw_data"][-1]  # Assume last value is the current setpoint
 
-        # if (output < threshold+stop):
-        #     self.stop_setpoint_dragging()
+        # Calculate PID terms
+        error = target_gradient - current_gradient  # Proportional term
+        self.integral += error * self.polling_interval  # Accumulate integral (ensure self.integral is initialized elsewhere)
+        derivative = (error - self.previous_error) / self.polling_interval  # Derivative term
+        self.previous_error = error  # Update previous error for next cycle
 
-        return output
+        # Compute PID output
+        output = p * error + i * self.integral + d * derivative
+
+        # Adjust the setpoint based on the PID output
+        next_setpoint = current_setpoint + output
+
+        # # Constrain the next setpoint within reasonable limits
+        # next_setpoint = max(min(next_setpoint, stop), threshold)
+
+        return next_setpoint
 
     def get_channel(self) -> LakeshoreModel336CurrentSource | None:
         try:
