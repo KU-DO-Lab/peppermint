@@ -457,7 +457,7 @@ class TemperatureScreen(Screen):
         mean: np.float32 = np.sqrt(np.mean(np.square(self.stats_buffer[channel]["raw_data"]))) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
         sum: np.float32 = self.stats_buffer[channel]["sum"] + (self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["raw_data"]) > 0 else 0.0)
-        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
+        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-1] - self.stats_buffer[channel]["raw_data"][-2]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
         acceleration: np.float32 = np.float32((gradient - previous_gradient) * 1/self.polling_interval)
 
         return {"std": std, "mean": mean, "gradient": gradient, "sum": sum, "acceleration": acceleration}
@@ -670,12 +670,10 @@ class TemperatureScreen(Screen):
 
         # Calculate PID terms
         error = target_gradient - current_gradient  # Proportional term
-        self.integral += error * self.polling_interval  # Accumulate integral (ensure self.integral is initialized elsewhere)
-        derivative = (error - self.previous_error) / self.polling_interval  # Derivative term
-        self.previous_error = error  # Update previous error for next cycle
+        integral = self.stats_buffer[channel]["raw_data"][-1]
 
         # Compute PID output
-        output = p * error + i * self.integral + d * derivative
+        output = p * error + i * integral + d * current_gradient
 
         # Adjust the setpoint based on the PID output
         next_setpoint = current_setpoint + output
