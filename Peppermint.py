@@ -390,8 +390,12 @@ class TemperatureScreen(Screen):
             target_gradient: float = float(self.query_one("#setpoint-dragging-rate-field", Input).value)
             stop: float = float(self.query_one("#setpoint-dragging-stop-field", Input).value)
             setp = self.guess_next_setpoint_for_dragging(threshold=threshold, stop=stop, target_gradient=target_gradient, p=p, i=i, d=d)
-            print(self.stats_buffer)
-            print(setp)
+
+            print(f"Mean: {self.stats_buffer["A"]["mean"]}")
+            print(f"Gradient: {self.stats_buffer["A"]["gradient"]}")
+            print(f"Acceleration: {self.stats_buffer["A"]["acceleration"]}")
+            print(f"Setpoint: {setp}")
+
             self.go_to_setpoint(setp)
         
     def get_output_percentage(self) -> None:
@@ -438,7 +442,7 @@ class TemperatureScreen(Screen):
 
                 # Update statistics
                 if channel not in self.stats_buffer:
-                    self.stats_buffer[channel] = {"raw_data": [], "rms": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0}
+                    self.stats_buffer[channel] = {"raw_data": [], "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0}
 
                 self.stats_buffer[channel]["raw_data"].append(value)
                 self.get_statistics(channel)
@@ -450,13 +454,13 @@ class TemperatureScreen(Screen):
 
         previous_gradient: np.float32 = self.stats_buffer[channel]["gradient"]
 
-        rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])**2) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
+        mean: np.float32 = np.sqrt(np.mean(np.square(self.stats_buffer[channel]["raw_data"]))) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        sum: np.float32 = self.stats_buffer[channel]["sum"] + self.stats_buffer[channel]["raw_data"][-1]
+        sum: np.float32 = self.stats_buffer[channel]["sum"] + (self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["raw_data"]) > 0 else 0.0)
         gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
-        acceleration: np.float32 = np.float32((gradient-previous_gradient) * 1/self.polling_interval)
+        acceleration: np.float32 = np.float32((gradient - previous_gradient) * 1/self.polling_interval)
 
-        return {"std": std, "rms": rms, "gradient": gradient, "sum": sum, "acceleration": acceleration}
+        return {"std": std, "mean": mean, "gradient": gradient, "sum": sum, "acceleration": acceleration}
         
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
