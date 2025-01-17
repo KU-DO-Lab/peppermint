@@ -323,6 +323,8 @@ class TemperatureScreen(Screen):
         self.polling_interval = 4
         self.update_timer = None
         self.active_channel = None
+        # self.do_dragging = False
+        # self.go_to_setpoint = None
  
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
@@ -380,6 +382,10 @@ class TemperatureScreen(Screen):
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
         self.get_temperatures(self.fetch_gettable_channels_and_parameters)
+        self.guess_next_setpoint_for_dragging(channel="A", target_gradient=-0.01, p=50, i=0.5, d=1)
+        # if self.go_to_setpoint:
+        #     self.go_to_setpoint()
+        # self.guess_next_setpoint_for_dragging()
         
     def get_output_percentage(self) -> None:
         if not self.allowed_temperature_monitors[0]:
@@ -435,7 +441,7 @@ class TemperatureScreen(Screen):
                 self.stats_buffer[channel]["raw_data"].append(value)
                 self.get_statistics(channel)
                 self.stats_buffer[channel].update(self.get_statistics(channel))
-                print(self.stats_buffer)
+                # print(self.stats_buffer)
 
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
@@ -444,7 +450,7 @@ class TemperatureScreen(Screen):
 
         rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])**2) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        sum: np.float32 = self.stats_buffer[channel]["sum"] + self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["sum"]) > 0 else np.float32(0.0)
+        sum: np.float32 = self.stats_buffer[channel]["sum"] + self.stats_buffer[channel]["raw_data"][-1]
         gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
         acceleration: np.float32 = np.float32((gradient-previous_gradient) * 1/self.polling_interval)
 
@@ -455,7 +461,7 @@ class TemperatureScreen(Screen):
         self.allowed_monitor_types = (LakeshoreModel336)
         self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
-        self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
+        # self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
 
         self.heater_mode = RadioSet(
             RadioButton("off", value=True), 
@@ -537,7 +543,7 @@ class TemperatureScreen(Screen):
                 Static("Setpoint Dragging:"),
                 Horizontal(
                     Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
-                    Horizontal(Static("Target Temperature", classes="label"), Input("...", type="number", classes="input-field", id="setpoint-dragging-input"), classes="container"),
+                    Horizontal(Static("Target Temperature", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-input"), classes="container"),
                     Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
                     classes="container",
                 ),
@@ -560,9 +566,9 @@ class TemperatureScreen(Screen):
             self.notify("please connect the Lakeshore 336!")
             return
 
-        self.temperature_monitors_select.clear()
-        self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
-        self.temperature_monitors_select.set_options(self.instrument_options)
+        # self.temperature_monitors_select.clear()
+        # self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
+        # self.temperature_monitors_select.set_options(self.instrument_options)
 
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
         # for a lakeshore 336, it has channels/submodules ABCD. this will differ with other controllers
@@ -620,7 +626,9 @@ class TemperatureScreen(Screen):
 
     def initialize_setpoint_dragging(self, channel: str, target_gradient: float) -> None: 
         p, i, d = 50, 20, 10
-        self.guess_next_setpoint_for_dragging(channel, target_gradient, p, i, d)
+        self.do_dragging = True
+        self.setpoint_dragging_next()
+        # self.guess_next_setpoint_for_dragging(channel, target_gradient, p, i, d)
 
     def guess_next_setpoint_for_dragging(self, channel: str, target_gradient: float, p: float, i: float, d: float) -> float:
         """Guess the next setpoint when using the 'setpoint dragging' feature. 
@@ -633,6 +641,8 @@ class TemperatureScreen(Screen):
         derivative = self.stats_buffer[channel]["acceleration"]
         output = p * error + i * integral + d * derivative
 
+        print(self.stats_buffer)
+        print(output)
         return output
 
     def go_to_setpoint(self) -> None: 
@@ -654,8 +664,12 @@ class TemperatureScreen(Screen):
 
         handlers = {
             "setpoint-start": lambda: self.go_to_setpoint(),
-            "setpoint-dragging-start": lambda: self.initialize_setpoint_dragging(setpoint_dragging_input)
+            "setpoint-dragging-start": self.initialize_setpoint_dragging(8.0, target_gradient=-0.01)
         }
+        
+        handler = handlers.get(str(event.item.id))
+        if handler:
+            handler()
 
     def change_active_channel(self, channel: str) -> None:
         
