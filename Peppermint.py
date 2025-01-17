@@ -323,8 +323,7 @@ class TemperatureScreen(Screen):
         self.polling_interval = 4
         self.update_timer = None
         self.active_channel = None
-        # self.do_dragging = False
-        # self.go_to_setpoint = None
+        self.is_dragging = False
  
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
@@ -382,23 +381,19 @@ class TemperatureScreen(Screen):
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
         self.get_temperatures(self.fetch_gettable_channels_and_parameters)
-        self.guess_next_setpoint_for_dragging(channel="A", target_gradient=-0.01, p=50, i=0.5, d=1)
-        # if self.go_to_setpoint:
-        #     self.go_to_setpoint()
-        # self.guess_next_setpoint_for_dragging()
+        if self.is_dragging:
+            setp = self.guess_next_setpoint_for_dragging(channel="A", target_gradient=-0.01, p=50, i=0.5, d=1)
         
     def get_output_percentage(self) -> None:
-        if not self.allowed_temperature_monitors[0]:
+        if not self.allowed_temperature_monitors[0] or self.app.simulated_mode:
             return
         
-        if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
+        # if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
+        #     return
+
+        channel = self.get_channel()
+        if not channel:
             return
-
-        if not self.active_channel:
-            return 
-
-        channel = self.active_channel
-        channel.input_channel("A")
         
         self.query_one("#output-percentage", Static).update(str(channel.output()))
 
@@ -543,8 +538,10 @@ class TemperatureScreen(Screen):
                 Static("Setpoint Dragging:"),
                 Horizontal(
                     Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
-                    Horizontal(Static("Target Temperature", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-input"), classes="container"),
+                    Horizontal(Static("Target Temperature", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-stop-field"), classes="container"),
+                    Horizontal(Static("Target Rate", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field"), classes="container"),
                     Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
+                    Button("Stop!", id="setpoint-dragging-stop", classes="confirmation"),
                     classes="container",
                 ),
                 classes="outlined-container",
@@ -594,15 +591,14 @@ class TemperatureScreen(Screen):
         if not self.allowed_temperature_monitors[0]:
             return
         
-        if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
+        # if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
+        if self.app.simulated_mode:
             self.get_temperatures(self.fetch_gettable_channels_and_parameters)
             return
 
-        if not self.active_channel:
-            return 
-
-        channel = self.active_channel
-        channel.input_channel("A")
+        channel = self.get_channel()
+        if not channel:
+            return
 
         # key/index dictionary for the heater mode and output range:
         # query a name and use this to pick the corresponding index of the radio set widget
@@ -624,33 +620,64 @@ class TemperatureScreen(Screen):
 
         print(f"{channel.print_readable_snapshot()}")
 
-    def initialize_setpoint_dragging(self, channel: str, target_gradient: float) -> None: 
-        p, i, d = 50, 20, 10
-        self.do_dragging = True
-        self.setpoint_dragging_next()
-        # self.guess_next_setpoint_for_dragging(channel, target_gradient, p, i, d)
+    def start_setpoint_dragging(self) -> None: 
+        p, i, d = 50, 0.5, 10
+        threshold: float = 1.0 # stop when within 1 degree
+        target_gradient: float = float(self.query_one("#setpoint-dragging-rate-field", Input).value)
+        stop: float = float(self.query_one("#setpoint-dragging-stop-field", Input).value)
 
-    def guess_next_setpoint_for_dragging(self, channel: str, target_gradient: float, p: float, i: float, d: float) -> float:
+        if stop == "" or threshold == "" or target_gradient == "":
+            self.notify("please input all dragging parameters")
+            return
+
+        self.do_dragging = True
+        self.guess_next_setpoint_for_dragging(stop, threshold, target_gradient, p, i, d)
+
+    def stop_setpoint_dragging(self) -> None:
+        self.is_dragging = False
+
+    def guess_next_setpoint_for_dragging(self, stop, threshold, target_gradient: float, p: float, i: float, d: float) -> float:
         """Guess the next setpoint when using the 'setpoint dragging' feature. 
 
         The problem here is to decide on an algorithm to choose where to pick the next setpoint between the current temperature and future temperature. 
         This approach tries to "hone in" the target decent rate by use of the PID algorithm.
         """
+
+        channel_mapping={"output_1": "A", "output_2": "B", "output_3": "C", "output_4": "D"}
+        channel: str | None = channel_mapping.get(self.active_channel.name_parts[-1])
+        if not channel:
+            self.notify("something went wrong, channel not found for setpoint dragging!")
+            self.stop_setpoint_dragging()
+            return stop
+
         error = self.stats_buffer[channel]["gradient"]
         integral = self.stats_buffer[channel]["raw_data"][-1]
         derivative = self.stats_buffer[channel]["acceleration"]
         output = p * error + i * integral + d * derivative
 
+        if (threshold+stop < output < stop-threshold):
+            self.stop_setpoint_dragging()
+
         print(self.stats_buffer)
         print(output)
         return output
 
-    def go_to_setpoint(self) -> None: 
-        if not self.active_channel:
-            return 
+    def get_channel(self) -> LakeshoreModel336CurrentSource | None:
+        try:
+            channel_mapping={"output_1": "A", "output_2": "B", "output_3": "C", "output_4": "D"}
+            channel=self.active_channel
+            channel.input_channel(channel_mapping.get(self.active_channel.name_parts[-1]))
 
-        channel = self.active_channel
-        channel.input_channel("A")
+            return channel
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+
+    def go_to_setpoint(self) -> None: 
+        channel = self.get_channel()
+        if not channel:
+            return
 
         setpoint_field = self.query_one("#setpoint-field", Input)
         if setpoint_field.value == "":
@@ -663,11 +690,12 @@ class TemperatureScreen(Screen):
         """Handle the pressed event for buttons on this screen."""
 
         handlers = {
-            "setpoint-start": lambda: self.go_to_setpoint(),
-            "setpoint-dragging-start": self.initialize_setpoint_dragging(8.0, target_gradient=-0.01)
+            "setpoint-start": lambda: (self.go_to_setpoint() if event.button.id != "" else None),
+            "setpoint-dragging-start": self.start_setpoint_dragging,
+            "setpoint-dragging-stop": self.stop_setpoint_dragging
         }
         
-        handler = handlers.get(str(event.item.id))
+        handler = handlers.get(str(event.button.id))
         if handler:
             handler()
 
@@ -701,14 +729,13 @@ class TemperatureScreen(Screen):
         channel.output_range(mode)
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
-        """Handle changes in any RadioSet."""
-        if not self.active_channel:
+        """Handle changes in any RadioSet. Does nothing in simulated mode since these actions aren't in the val_mapping."""
+
+        if self.app.simulated_mode or not event.radio_set.id:
             return 
 
-        channel = self.active_channel
-        channel.input_channel("A")
-        
-        if not event.radio_set.id:
+        channel = self.get_channel()
+        if not channel:
             return
 
         # Map RadioSet IDs to their corresponding handling logic
@@ -725,13 +752,11 @@ class TemperatureScreen(Screen):
         channel.print_readable_snapshot()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if not self.active_channel:
-            return 
-
-        channel = self.active_channel
-        channel.input_channel("A")
-
         if not event.input.id:
+            return
+
+        channel = self.get_channel()
+        if not channel:
             return
 
         handlers = {
