@@ -430,20 +430,25 @@ class TemperatureScreen(Screen):
 
                 # Update statistics
                 if channel not in self.stats_buffer:
-                    self.stats_buffer[channel] = {"raw_data": [], "rms": float("nan"), "std": float("nan"), "gradient": float("nan")}
+                    self.stats_buffer[channel] = {"raw_data": [], "rms": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0}
 
                 self.stats_buffer[channel]["raw_data"].append(value)
                 self.get_statistics(channel)
                 self.stats_buffer[channel].update(self.get_statistics(channel))
+                print(self.stats_buffer)
 
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
 
+        previous_gradient: np.float32 = self.stats_buffer[channel]["gradient"]
+
         rms: np.float32 = np.sqrt(np.mean(self.stats_buffer[channel]["raw_data"])**2) if len(self.stats_buffer[channel]) > 0 else np.floating("nan")
         std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
+        sum: np.float32 = self.stats_buffer[channel]["sum"] + self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["sum"]) > 0 else np.float32(0.0)
         gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-2] - self.stats_buffer[channel]["raw_data"][-1]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
+        acceleration: np.float32 = np.float32((gradient-previous_gradient) * 1/self.polling_interval)
 
-        return {"std": std, "rms": rms, "gradient": gradient}
+        return {"std": std, "rms": rms, "gradient": gradient, "sum": sum, "acceleration": acceleration}
         
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
@@ -477,16 +482,16 @@ class TemperatureScreen(Screen):
         )
 
         yield Header()
-        with TabbedContent("Good to Go"):
+        with TabbedContent("Working", "Experimental"):
             yield Container(
                 # Top row: contains statistics and controls
                 Horizontal(
-                    Horizontal(
-                        Static("Temperature Controller:     \n(Currently useless)", classes="label"), 
-                        self.temperature_monitors_select, 
-                        classes="outlined-container",
-                        id="temperature-controller-select",
-                    ),
+                    # Horizontal(
+                    #     Static("Temperature Controller:     \n(Currently useless)", classes="label"), 
+                    #     self.temperature_monitors_select, 
+                    #     classes="outlined-container",
+                    #     id="temperature-controller-select",
+                    # ),
                     Vertical(
                         Horizontal(Static("Status:    ", classes="label"), self.status_table),
                         Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label")),
@@ -502,7 +507,7 @@ class TemperatureScreen(Screen):
                             ),
                             Horizontal( 
                                 Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
-                                Button("Confirm!", classes="confirmation"),
+                                Button("Confirm!", id="setpoint-start", classes="confirmation"),
                                 classes="temperature-controller-controls",
                             ),
                             classes="centered-widget"
@@ -532,8 +537,8 @@ class TemperatureScreen(Screen):
                 Static("Setpoint Dragging:"),
                 Horizontal(
                     Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
-                    Horizontal(Static("Target Temperature", classes="label"), Input("...", type="number", classes="input-field", id="dragging-input"), classes="container"),
-                    Button("Go!", classes="confirmation"),
+                    Horizontal(Static("Target Temperature", classes="label"), Input("...", type="number", classes="input-field", id="setpoint-dragging-input"), classes="container"),
+                    Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
                     classes="container",
                 ),
                 classes="outlined-container",
@@ -613,20 +618,44 @@ class TemperatureScreen(Screen):
 
         print(f"{channel.print_readable_snapshot()}")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        # Temporary config: this will eventually be configured in GUI
+    def initialize_setpoint_dragging(self, channel: str, target_gradient: float) -> None: 
+        p, i, d = 50, 20, 10
+        self.guess_next_setpoint_for_dragging(channel, target_gradient, p, i, d)
+
+    def guess_next_setpoint_for_dragging(self, channel: str, target_gradient: float, p: float, i: float, d: float) -> float:
+        """Guess the next setpoint when using the 'setpoint dragging' feature. 
+
+        The problem here is to decide on an algorithm to choose where to pick the next setpoint between the current temperature and future temperature. 
+        This approach tries to "hone in" the target decent rate by use of the PID algorithm.
+        """
+        error = self.stats_buffer[channel]["gradient"]
+        integral = self.stats_buffer[channel]["raw_data"][-1]
+        derivative = self.stats_buffer[channel]["acceleration"]
+        output = p * error + i * integral + d * derivative
+
+        return output
+
+    def go_to_setpoint(self) -> None: 
         if not self.active_channel:
             return 
 
         channel = self.active_channel
         channel.input_channel("A")
 
-        if self.setpoint_field.value == "":
+        setpoint_field = self.query_one("#setpoint-field", Input)
+        if setpoint_field.value == "":
             return
 
-        if not self.setpoint_field.disabled:
-            channel.setpoint(float(self.setpoint_field.value))
+        if not setpoint_field.disabled:
+            channel.setpoint(float(setpoint_field.value))
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle the pressed event for buttons on this screen."""
+
+        handlers = {
+            "setpoint-start": lambda: self.go_to_setpoint(),
+            "setpoint-dragging-start": lambda: self.initialize_setpoint_dragging(setpoint_dragging_input)
+        }
 
     def change_active_channel(self, channel: str) -> None:
         
@@ -634,12 +663,7 @@ class TemperatureScreen(Screen):
             return
         
         lake = self.allowed_temperature_monitors[0]
-        heaters = {
-            "A": lake.output_1,
-            "B": lake.output_2, 
-            "C": lake.output_3,
-            "D": lake.output_4
-        }
+        heaters = { "A": lake.output_1, "B": lake.output_2, "C": lake.output_3, "D": lake.output_4 }
         self.active_channel = heaters[channel]
         self.populate_fields()
         # self.fetch_gettable_channels_and_parameters()
