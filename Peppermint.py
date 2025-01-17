@@ -381,15 +381,22 @@ class TemperatureScreen(Screen):
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
         self.get_temperatures(self.fetch_gettable_channels_and_parameters)
+        print(self.is_dragging)
         if self.is_dragging:
-            setp = self.guess_next_setpoint_for_dragging(channel="A", target_gradient=-0.01, p=50, i=0.5, d=1)
+            p = float(self.query_one("#dragging-p-field", Input).value)
+            i = float(self.query_one("#dragging-i-field", Input).value)
+            d = float(self.query_one("#dragging-d-field", Input).value)
+            threshold: float = 1.0 # stop when within 1 degree
+            target_gradient: float = float(self.query_one("#setpoint-dragging-rate-field", Input).value)
+            stop: float = float(self.query_one("#setpoint-dragging-stop-field", Input).value)
+            setp = self.guess_next_setpoint_for_dragging(threshold=threshold, stop=stop, target_gradient=target_gradient, p=p, i=i, d=d)
+            print(self.stats_buffer)
+            print(setp)
+            self.go_to_setpoint(setp)
         
     def get_output_percentage(self) -> None:
         if not self.allowed_temperature_monitors[0] or self.app.simulated_mode:
             return
-        
-        # if self.allowed_temperature_monitors[0].full_name == "simulated_lakeshore336":
-        #     return
 
         channel = self.get_channel()
         if not channel:
@@ -542,6 +549,9 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("Target Rate", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field"), classes="container"),
                     Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
                     Button("Stop!", id="setpoint-dragging-stop", classes="confirmation"),
+                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-p-field"), classes="container"),
+                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-i-field"), classes="container"),
+                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-d-field"), classes="container"),
                     classes="container",
                 ),
                 classes="outlined-container",
@@ -630,10 +640,12 @@ class TemperatureScreen(Screen):
             self.notify("please input all dragging parameters")
             return
 
-        self.do_dragging = True
+        self.is_dragging = True
         self.guess_next_setpoint_for_dragging(stop, threshold, target_gradient, p, i, d)
 
     def stop_setpoint_dragging(self) -> None:
+        print("stopping")
+        self.notify("stopping dragging")
         self.is_dragging = False
 
     def guess_next_setpoint_for_dragging(self, stop, threshold, target_gradient: float, p: float, i: float, d: float) -> float:
@@ -655,11 +667,9 @@ class TemperatureScreen(Screen):
         derivative = self.stats_buffer[channel]["acceleration"]
         output = p * error + i * integral + d * derivative
 
-        if (threshold+stop < output < stop-threshold):
-            self.stop_setpoint_dragging()
+        # if (output < threshold+stop):
+        #     self.stop_setpoint_dragging()
 
-        print(self.stats_buffer)
-        print(output)
         return output
 
     def get_channel(self) -> LakeshoreModel336CurrentSource | None:
@@ -674,23 +684,20 @@ class TemperatureScreen(Screen):
             print(f"Error: {e}")
 
 
-    def go_to_setpoint(self) -> None: 
+    def go_to_setpoint(self, setp) -> None: 
         channel = self.get_channel()
         if not channel:
             return
 
-        setpoint_field = self.query_one("#setpoint-field", Input)
-        if setpoint_field.value == "":
-            return
-
-        if not setpoint_field.disabled:
-            channel.setpoint(float(setpoint_field.value))
+        channel.setpoint(float(setp))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""
 
         handlers = {
-            "setpoint-start": lambda: (self.go_to_setpoint() if event.button.id != "" else None),
+            "setpoint-start": lambda: (self.go_to_setpoint(self.query_one("#setpoint-field", Input).value) 
+                                       if self.query_one("#setpoint-field", Input).value.strip() != "" 
+                                       else None),
             "setpoint-dragging-start": self.start_setpoint_dragging,
             "setpoint-dragging-stop": self.stop_setpoint_dragging
         }
