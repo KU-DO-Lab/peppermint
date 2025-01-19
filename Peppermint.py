@@ -17,7 +17,7 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import Footer, Header, RadioButton, RadioSet, Rule, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
+from textual.widgets import Footer, Header, RadioButton, RadioSet, Rule, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem, Collapsible, Pretty
 
 
 @dataclass
