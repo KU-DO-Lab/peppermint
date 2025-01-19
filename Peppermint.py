@@ -450,7 +450,7 @@ class TemperatureScreen(Screen):
 
                 # update the widgets on screen
                 self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel]["mean"]))
-                self.query_one("#stats-stdev", Static).update(str(self.stats_buffer[channel]["stdev"]))
+                self.query_one("#stats-std", Static).update(str(self.stats_buffer[channel]["std"]))
                 self.query_one("#stats-gradient", Static).update(str(self.stats_buffer[channel]["gradient"]))
                 self.query_one("#stats-acceleration", Static).update(str(self.stats_buffer[channel]["acceleration"]))
                 # print(self.stats_buffer)
@@ -532,7 +532,7 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("Status:", classes="label"), self.status_table, classes="accent-container"),
                     Horizontal(Static("Output %:", classes="label"), Static("...", id="output-percentage", classes="label"), classes="accent-container"),
                     Horizontal(Static("Mean:", classes="label"), Static("N/A", id="stats-mean", classes="label"), classes="accent-container"),
-                    Horizontal(Static("Stdev:", classes="label"), Static("N/A", id="stats-stdev", classes="label"), classes="accent-container"),
+                    Horizontal(Static("Std:", classes="label"), Static("N/A", id="stats-std", classes="label"), classes="accent-container"),
                     Horizontal(Static("Gradient:", classes="label"), Static("N/A", id="stats-gradient", classes="label"), classes="accent-container"),
                     Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container"),
                     id="temperature-controller-status",
