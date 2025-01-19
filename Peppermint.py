@@ -17,7 +17,7 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import Footer, Header, RadioButton, RadioSet, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
+from textual.widgets import Footer, Header, RadioButton, RadioSet, Rule, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem
 
 
 @dataclass
@@ -528,8 +528,11 @@ class TemperatureScreen(Screen):
 
                 # Right side information
                 Vertical(
-                    Static("Information", classes="centered-subtitle"),
-                    Horizontal(Static("Status:", classes="label"), self.status_table, classes="accent-container"),
+                    Container(Static("Information", classes="centered-subtitle"), classes="centered-widget"),
+                    Horizontal(Static("Active Channel:", classes="label"), self.status_table, classes="accent-container"),
+
+                    Rule(),
+
                     Horizontal(Static("Output %:", classes="label"), Static("...", id="output-percentage", classes="label"), classes="accent-container"),
                     Horizontal(Static("Mean:", classes="label"), Static("N/A", id="stats-mean", classes="label"), classes="accent-container"),
                     Horizontal(Static("Std:", classes="label"), Static("N/A", id="stats-std", classes="label"), classes="accent-container"),
@@ -927,6 +930,7 @@ class Peppermint(App):
     }
     
     def on_mount(self) -> None:
+        self.theme = "nord"
         self.push_screen('main_screen')
         initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
 
