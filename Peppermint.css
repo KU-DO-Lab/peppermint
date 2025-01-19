@@ -90,9 +90,16 @@ ManualConnectionDialog {
     height: auto;
     margin-left: 1;
     margin-right: 1;
-    dock: top;
     align-horizontal: center;
 }
+
+.right-aligned-widget {
+    height: auto;
+    margin-left: 1;
+    margin-right: 1;
+    align-horizontal: right;
+}
+
 
 .outlined-container {
     border: round white 10%;
@@ -123,6 +130,13 @@ ManualConnectionDialog {
 #PID-container {
     width: auto;
     height: auto;
+}
+
+#refresh-stats-button {
+    max-width: 7;
+    max-height: 3;
+    height: auto;
+    width: auto;
 }
 
 #temperature-controller-status {

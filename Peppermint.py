@@ -319,7 +319,6 @@ class TemperatureScreen(Screen):
 
     def __init__(self):
         super().__init__()
-        # self.polling_frequency = 0.25
         self.polling_interval = 4
         self.update_timer = None
         self.active_channel = None
@@ -538,6 +537,8 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("Std:", classes="label"), Static("N/A", id="stats-std", classes="label"), classes="accent-container"),
                     Horizontal(Static("Gradient:", classes="label"), Static("N/A", id="stats-gradient", classes="label"), classes="accent-container"),
                     Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container"),
+                    
+                    Horizontal(Button("", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
                     id="temperature-controller-status",
                 ), classes="container"
             )
@@ -738,7 +739,9 @@ class TemperatureScreen(Screen):
                                        if self.query_one("#setpoint-field", Input).value.strip() != "" 
                                        else None),
             "setpoint-dragging-start": self.start_setpoint_dragging,
-            "setpoint-dragging-stop": self.stop_setpoint_dragging
+            "setpoint-dragging-stop": self.stop_setpoint_dragging,
+            "refresh-stats-button": lambda: self.stats_buffer.clear()
+,
         }
         
         handler = handlers.get(str(event.button.id))
