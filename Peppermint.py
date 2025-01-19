@@ -503,12 +503,14 @@ class TemperatureScreen(Screen):
                 # Left side controller settings
                 Vertical(
                     Horizontal(
+                        Button("", tooltip="Heater range settings. Heater mode can be set to closed loop or open loop which have different purposes:\n\n1. Open loop: for PID-controlled setpoint magic.\n2. Closed loop: for pushing a constant current through the heating element.", disabled=True, classes="tooltip"),
                         Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
                         Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
                         classes="temperature-controller-controls",
                     ),
 
                     Vertical( 
+                        Button("", tooltip="PID values for the heating element's setpoint control. If the heater never stabilizes, adjust P. If the heater never reaches the setpoint raise I by double. If it instead  oscillates about it for too long, lower by a half. Raising and lowering D may help it get to the setpoint faster. Manual output forcibly sets the heater output % without regard for setpoint.", disabled=True, classes="tooltip"),
                         Static("PID:", classes="label"), 
                         Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
                         Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
@@ -519,11 +521,36 @@ class TemperatureScreen(Screen):
                     ),
 
                     Horizontal( 
+                        Button("", tooltip="Go to a setpoint! Only works in closed loop mode.", disabled=True, classes="tooltip"),
                         Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
                         Button("Confirm!", id="setpoint-start", classes="confirmation"),
                         classes="temperature-controller-controls",
                     ),
+                    classes="container"
                 ),
+
+                Vertical(
+                    Button("", tooltip="For maintaining a gentle ascent/descent at a fixed rate.\n\nCurrently requires supervision to change output ranges AND watch over 'I' since different ranges may demand higher/lower values", disabled=True, classes="tooltip"),
+                    Static("Setpoint Dragging:", classes="inline-label"), 
+                    Horizontal(
+                        Static("Target Rate", classes="label"), 
+                        Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field"), 
+                        classes="container"
+                    ),
+                    Horizontal(
+                        Horizontal(Static("P:", classes="label"), Input(placeholder="20", type="number", classes="input-field", id="dragging-p-field"), classes="container"),
+                        Horizontal(Static("I:", classes="label"), Input(placeholder="1e-4", type="number", classes="input-field", id="dragging-i-field"), classes="container"),
+                        Horizontal(Static("D:", classes="label"), Input(placeholder="10", type="number", classes="input-field", id="dragging-d-field"), classes="container"),
+                        classes="container"
+                    ),
+                    Horizontal(
+                        Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
+                        Button("Stop!", id="setpoint-dragging-stop", classes="confirmation"),
+                        classes="container"
+                    ),
+                    classes="outlined-container",
+                ),
+
 
                 # Right side information
                 Vertical(
@@ -542,60 +569,8 @@ class TemperatureScreen(Screen):
                     id="temperature-controller-status",
                 ), classes="container"
             )
+            yield Container()
 
-            yield Container(
-                Vertical(
-                    Vertical(
-                        Static("Setpoint Dragging:"),
-                        Horizontal(
-                            Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
-                            Horizontal(Static("Target Temperature", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-stop-field"), classes="container"),
-                            Horizontal(Static("Target Rate", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field"), classes="container"),
-                            Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
-                            Button("Stop!", id="setpoint-dragging-stop", classes="confirmation"),
-                            Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-p-field"), classes="container"),
-                            Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-i-field"), classes="container"),
-                            Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-d-field"), classes="container"),
-                            classes="container",
-                        ),
-                        classes="outlined-container",
-                    ),
-
-                ),
-
-                # Right side information
-                Vertical(
-                    Static("Information", classes="centered-subtitle"),
-                    Horizontal(Static("Status:    ", classes="label"), self.status_table, classes="accent-container"),
-                    Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label"), classes="accent-container"),
-                    id="temperature-controller-status",
-                )
-
-
-            )
-
-            yield Container(
-                # Top row: contains statistics and controls
-                Horizontal(
-                    Horizontal(
-                        Vertical(
-                            classes="centered-widget"
-                        ),
-                        classes="centered-widget"
-                    ),
-                    Horizontal(
-                        classes="outlined-container"
-                    ),
-                    classes="centered-widget"
-                ),
-                # Bottom rows: contains graphic information
-                # Container(Placeholder()),
-                classes="outlined-container",
-            )
-            yield Horizontal(
-                # additional widgets go here
-            Horizontal(classes="container"),
-            )
         yield Footer()
 
     async def on_screen_resume(self) -> None:

@@ -43,6 +43,8 @@ ManualConnectionDialog {
 .confirmation {
     height: auto;
     width: auto;
+    align-horizontal: center;
+    margin: 1 1;
 }
 
 .info {
@@ -86,6 +88,16 @@ ManualConnectionDialog {
     height: 25%;
 }
 
+.tooltip {
+    width: auto;
+    height: auto;
+    max-width: 6;
+    max-height: 3;
+    dock: right;
+    margin: 0 1;
+    background: $accent;
+}
+
 .centered-widget {
     height: auto;
     margin-left: 1;
@@ -99,7 +111,6 @@ ManualConnectionDialog {
     margin-right: 1;
     align-horizontal: right;
 }
-
 
 .outlined-container {
     border: round white 10%;
@@ -159,4 +170,5 @@ ManualConnectionDialog {
 
 .input-field {
     width: auto;
+    height: auto;
 }
