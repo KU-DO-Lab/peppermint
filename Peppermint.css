@@ -5,7 +5,15 @@ ManualConnectionDialog {
 .container {
     height: auto;
     width: auto;
+    align: center middle;
 }
+
+.accent-container {
+    height: auto;
+    width: auto;
+    background: $panel;
+}
+
 
 .label {
     height: auto;
@@ -14,9 +22,16 @@ ManualConnectionDialog {
     align: center middle;
 }
 
+.centered-subtitle {
+    height: auto;
+    width: auto;
+    padding: 1 1;
+    align: center middle;
+    text-align: center;
+}
+
 .inline-label {
     max-height: 2;
-    /*height: 3; */
     width: auto;
 }
 
@@ -27,6 +42,13 @@ ManualConnectionDialog {
 .confirmation {
     height: auto;
     width: auto;
+}
+
+.info {
+    width: auto;
+    height: auto;
+    padding: 1 2;
+    background: $panel;
 }
 
 #main-menu-grid {
@@ -97,26 +119,16 @@ ManualConnectionDialog {
 #PID-container {
     width: auto;
     height: auto;
-    /*padding: 0 1;*/
-    /*min-width: 16;*/
-}
-
-#temperature-controller-select {
-    height: 0.25fr;
-    min-height: 6;
-    margin: 2 1;
-    min-width: 30;
-    max-width: 60;
-    width: 0.6fr;
 }
 
 #temperature-controller-status {
-    /*min-width: 32;*/
-    /*max-width: 32;*/
-    width: 32;
-    min-height: 10;
-    height: 0.25fr;
-    margin: 2 1;
+    dock: right;
+    height: 100vh;
+    width: auto;  /* Fixed width instead of fractional */
+    min-width: 30;
+    max-width: 60;
+    background: $secondary;  /* Light gray background, you can change this */
+    padding: 2 1;
 }
 
 .temperature-controller-controls {

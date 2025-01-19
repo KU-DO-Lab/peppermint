@@ -381,7 +381,7 @@ class TemperatureScreen(Screen):
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
         self.get_temperatures(self.fetch_gettable_channels_and_parameters)
-        print(self.is_dragging)
+        # print(self.is_dragging)
         if self.is_dragging:
             p = float(self.query_one("#dragging-p-field", Input).value)
             i = float(self.query_one("#dragging-i-field", Input).value)
@@ -447,6 +447,12 @@ class TemperatureScreen(Screen):
                 self.stats_buffer[channel]["raw_data"].append(value)
                 self.get_statistics(channel)
                 self.stats_buffer[channel].update(self.get_statistics(channel))
+
+                # update the widgets on screen
+                self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel]["mean"]))
+                self.query_one("#stats-stdev", Static).update(str(self.stats_buffer[channel]["stdev"]))
+                self.query_one("#stats-gradient", Static).update(str(self.stats_buffer[channel]["gradient"]))
+                self.query_one("#stats-acceleration", Static).update(str(self.stats_buffer[channel]["acceleration"]))
                 # print(self.stats_buffer)
 
     def get_statistics(self, channel: str) -> Dict[str, Any]:
@@ -467,13 +473,12 @@ class TemperatureScreen(Screen):
         self.allowed_monitor_types = (LakeshoreModel336)
         self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
         self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
-        # self.temperature_monitors_select = Select[str](self.instrument_options, disabled=True)
 
         self.heater_mode = RadioSet(
             RadioButton("off", value=True), 
             RadioButton("closed_loop", tooltip="feedback loop (automatic)"), 
             RadioButton("open_loop", tooltip="no feedback loop (manual)"),
-            RadioButton("zone", tooltip="Not yet implemented", disabled=True),
+            # RadioButton("zone", tooltip="Not yet implemented", disabled=True),
             id="heater-mode",
         )
 
@@ -495,37 +500,15 @@ class TemperatureScreen(Screen):
 
         yield Header()
         with TabbedContent("Working", "Experimental"):
-            yield Container(
-                # Top row: contains statistics and controls
-                Horizontal(
-                    # Horizontal(
-                    #     Static("Temperature Controller:     \n(Currently useless)", classes="label"), 
-                    #     self.temperature_monitors_select, 
-                    #     classes="outlined-container",
-                    #     id="temperature-controller-select",
-                    # ),
-                    Vertical(
-                        Horizontal(Static("Status:    ", classes="label"), self.status_table),
-                        Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label")),
-                        classes="outlined-container", 
-                        id="temperature-controller-status",
-                    ),
+            yield Horizontal(
+                # Left side controller settings
+                Vertical(
                     Horizontal(
-                        Vertical(
-                            Horizontal(
-                                Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
-                                Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
-                                classes="temperature-controller-controls",
-                            ),
-                            Horizontal( 
-                                Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
-                                Button("Confirm!", id="setpoint-start", classes="confirmation"),
-                                classes="temperature-controller-controls",
-                            ),
-                            classes="centered-widget"
-                        ),
-                        classes="centered-widget"
+                        Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
+                        Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
+                        classes="temperature-controller-controls",
                     ),
+
                     Vertical( 
                         Static("PID:", classes="label"), 
                         Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
@@ -534,6 +517,67 @@ class TemperatureScreen(Screen):
                         Horizontal(Static("Manual Output:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="manual-output"), classes="container"), 
                         id="PID-container", 
                         classes="outlined-container" 
+                    ),
+
+                    Horizontal( 
+                        Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
+                        Button("Confirm!", id="setpoint-start", classes="confirmation"),
+                        classes="temperature-controller-controls",
+                    ),
+                ),
+
+                # Right side information
+                Vertical(
+                    Static("Information", classes="centered-subtitle"),
+                    Horizontal(Static("Status:", classes="label"), self.status_table, classes="accent-container"),
+                    Horizontal(Static("Output %:", classes="label"), Static("...", id="output-percentage", classes="label"), classes="accent-container"),
+                    Horizontal(Static("Mean:", classes="label"), Static("N/A", id="stats-mean", classes="label"), classes="accent-container"),
+                    Horizontal(Static("Stdev:", classes="label"), Static("N/A", id="stats-stdev", classes="label"), classes="accent-container"),
+                    Horizontal(Static("Gradient:", classes="label"), Static("N/A", id="stats-gradient", classes="label"), classes="accent-container"),
+                    Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container"),
+                    id="temperature-controller-status",
+                ), classes="container"
+            )
+
+            yield Container(
+                Vertical(
+                    Vertical(
+                        Static("Setpoint Dragging:"),
+                        Horizontal(
+                            Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
+                            Horizontal(Static("Target Temperature", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-stop-field"), classes="container"),
+                            Horizontal(Static("Target Rate", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field"), classes="container"),
+                            Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
+                            Button("Stop!", id="setpoint-dragging-stop", classes="confirmation"),
+                            Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-p-field"), classes="container"),
+                            Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-i-field"), classes="container"),
+                            Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-d-field"), classes="container"),
+                            classes="container",
+                        ),
+                        classes="outlined-container",
+                    ),
+
+                ),
+
+                # Right side information
+                Vertical(
+                    Static("Information", classes="centered-subtitle"),
+                    Horizontal(Static("Status:    ", classes="label"), self.status_table, classes="accent-container"),
+                    Horizontal(Static("output %:", classes="label"), Static("...", id="output-percentage", classes="label"), classes="accent-container"),
+                    id="temperature-controller-status",
+                )
+
+
+            )
+
+            yield Container(
+                # Top row: contains statistics and controls
+                Horizontal(
+                    Horizontal(
+                        Vertical(
+                            classes="centered-widget"
+                        ),
+                        classes="centered-widget"
                     ),
                     Horizontal(
                         classes="outlined-container"
@@ -545,21 +589,6 @@ class TemperatureScreen(Screen):
                 classes="outlined-container",
             )
             yield Horizontal(
-            Container(
-                Static("Setpoint Dragging:"),
-                Horizontal(
-                    Vertical(Static("Speed", classes="label"), RadioSet( RadioButton("slow", tooltip="??? target cooling rate"), RadioButton("medium", tooltip="??? target cooling rate"), RadioButton("fast", tooltip="??? target cooling rate"), id="setpoint-dragging-speed",), classes="container"),
-                    Horizontal(Static("Target Temperature", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-stop-field"), classes="container"),
-                    Horizontal(Static("Target Rate", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field"), classes="container"),
-                    Button("Go!", id="setpoint-dragging-start", classes="confirmation"),
-                    Button("Stop!", id="setpoint-dragging-stop", classes="confirmation"),
-                    Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-p-field"), classes="container"),
-                    Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-i-field"), classes="container"),
-                    Horizontal(Static("D:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="dragging-d-field"), classes="container"),
-                    classes="container",
-                ),
-                classes="outlined-container",
-            ),
                 # additional widgets go here
             Horizontal(classes="container"),
             )
@@ -576,10 +605,6 @@ class TemperatureScreen(Screen):
         if len(self.allowed_temperature_monitors) <= 0: 
             self.notify("please connect the Lakeshore 336!")
             return
-
-        # self.temperature_monitors_select.clear()
-        # self.instrument_options: list[tuple[str, str]] = [(instrument.name, instrument.name) for instrument in self.allowed_temperature_monitors]
-        # self.temperature_monitors_select.set_options(self.instrument_options)
 
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
         # for a lakeshore 336, it has channels/submodules ABCD. this will differ with other controllers
@@ -648,7 +673,7 @@ class TemperatureScreen(Screen):
         self.guess_next_setpoint_for_dragging(stop, threshold, target_gradient, p, i, d)
 
     def stop_setpoint_dragging(self) -> None:
-        print("stopping")
+        # print("stopping")
         self.notify("stopping dragging")
         self.is_dragging = False
 
