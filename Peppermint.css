@@ -152,7 +152,6 @@ ManualConnectionDialog {
 
 #temperature-controller-status {
     dock: right;
-    height: 100vh;
     width: auto;  /* Fixed width instead of fractional */
     min-width: 30;
     max-width: 40;
