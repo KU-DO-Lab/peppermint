@@ -4,7 +4,7 @@ from numpy._core.numerictypes import floating
 import pyvisa
 import argparse
 import numpy as np
-import asyncio
+from collections import deque
 
 from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from utils.util import *
@@ -399,14 +399,14 @@ class TemperatureScreen(Screen):
                 # Left side controller settings
                 Vertical(
                     Horizontal(
-                        Button("", tooltip="Heater range settings. Heater mode can be set to closed loop or open loop which have different purposes:\n\n1. Open loop: for PID-controlled setpoint magic.\n2. Closed loop: for pushing a constant current through the heating element.", disabled=True, classes="tooltip"),
+                        Button("?", tooltip="Heater range settings. Heater mode can be set to closed loop or open loop which have different purposes:\n\n1. Open loop: for PID-controlled setpoint magic.\n2. Closed loop: for pushing a constant current through the heating element.", disabled=True, classes="tooltip"),
                         Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" ),
                         Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" ),
                         classes="temperature-controller-controls",
                     ),
 
                     Vertical( 
-                        Button("", tooltip="PID values for the heating element's setpoint control. If the heater never stabilizes, adjust P. If the heater never reaches the setpoint raise I by double. If it instead  oscillates about it for too long, lower by a half. Raising and lowering D may help it get to the setpoint faster. Manual output forcibly sets the heater output % without regard for setpoint.", disabled=True, classes="tooltip"),
+                        Button("?", tooltip="PID values for the heating element's setpoint control. If the heater never stabilizes, adjust P. If the heater never reaches the setpoint raise I by double. If it instead  oscillates about it for too long, lower by a half. Raising and lowering D may help it get to the setpoint faster. Manual output forcibly sets the heater output % without regard for setpoint.", disabled=True, classes="tooltip"),
                         Static("PID:", classes="label"), 
                         Horizontal(Static("P:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container"), 
                         Horizontal(Static("I:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container"), 
@@ -417,7 +417,7 @@ class TemperatureScreen(Screen):
                     ),
 
                     Horizontal( 
-                        Button("", tooltip="Go to a setpoint! Only works in closed loop mode.", disabled=True, classes="tooltip"),
+                        Button("?", tooltip="Go to a setpoint! Only works in closed loop mode.", disabled=True, classes="tooltip"),
                         Static("Setpoint:", classes="label"), Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field"), # need to check enabled on screen change, Static("(K)", classes="label"),
                         Button("Confirm!", id="setpoint-start", classes="confirmation"),
                         classes="temperature-controller-controls",
@@ -426,7 +426,7 @@ class TemperatureScreen(Screen):
                 ),
 
                 Vertical(
-                    Button("", tooltip="For maintaining a gentle ascent/descent at a fixed rate.\n\nCurrently requires supervision to change output ranges AND watch over 'I' since different ranges may demand higher/lower values", disabled=True, classes="tooltip"),
+                    Button("?", tooltip="For maintaining a gentle ascent/descent at a fixed rate.\n\nCurrently requires supervision to change output ranges AND watch over 'I' since different ranges may demand higher/lower values", disabled=True, classes="tooltip"),
                     Static("Setpoint Dragging:", classes="inline-label"), 
                     Horizontal(
                         Static("Target Rate", classes="label"), 
@@ -462,7 +462,7 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container"),
                     Horizontal(Static("Output Variation:", classes="label"), Static("N/A", id="stats-output-variation", classes="label"), classes="accent-container"),
                     
-                    Horizontal(Button("", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
+                    Horizontal(Button("?", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
                     id="temperature-controller-status",
                 ), classes="container"
             )
@@ -526,11 +526,21 @@ class TemperatureScreen(Screen):
         if not self.allowed_temperature_monitors[0] or self.app.simulated_mode:
             return
 
-        channel = self.get_channel()
-        if not channel:
+        heater = self.get_channel()
+        if not heater:
             return
         
-        self.query_one("#output-percentage", Static).update(str(channel.output()))
+        channel_mapping = {"output_1": "A", "output_2": "B", "output_3": "C", "output_4": "D"}
+        channel_name: str | None = channel_mapping.get(self.active_channel.name_parts[-1])
+        
+        self.query_one("#output-percentage", Static).update(str(heater.output()))
+
+        # Update statistics
+        if channel_name not in self.stats_buffer:
+            self.stats_buffer[channel_name] = {"raw_data": deque([], maxlen=128), "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0, "output_percent": deque([], maxlen=2), "output_variation": 0.0}
+
+        self.stats_buffer[channel_name]["output_percent"].append(float(heater.output()))
+
 
     def fetch_gettable_channels_and_parameters(self) -> Dict[str, ParameterBase]:
         """Return the parameter to get each temperature from."""
@@ -583,17 +593,11 @@ class TemperatureScreen(Screen):
 
                 # Update statistics
                 if channel_name not in self.stats_buffer:
-                    self.stats_buffer[channel_name] = {"raw_data": [], "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0, "output_variation": 0.0}
+                    self.stats_buffer[channel_name] = {"raw_data": deque([], maxlen=128), "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0, "output_percent": deque([], maxlen=2), "output_variation": 0.0}
 
                 self.stats_buffer[channel_name]["raw_data"].append(value)
                 self.get_statistics(channel_name)
                 self.stats_buffer[channel_name].update(self.get_statistics(channel_name))
-
-                # It's not very elegant, but we need the heater object to get the output of it.
-                if not self.app.simulated_mode: # type: ignore
-                    previous_output: float = float(self.query_one("#stats-output-variation", Static).children[0].render()._renderable)
-                    heater_channel: LakeshoreModel336CurrentSource = self.get_channel()
-                    self.stats_buffer[channel_name]["output_variation"].update(previous_output - heater_channel.output())
 
                 # update the widgets on screen
                 self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel_name]["mean"]))
@@ -607,15 +611,17 @@ class TemperatureScreen(Screen):
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
 
-        previous_gradient: np.float32 = self.stats_buffer[channel]["gradient"]
+        buf = self.stats_buffer[channel]
+        previous_gradient: np.float32 = buf["gradient"]
 
-        mean: np.float32 = np.sqrt(np.mean(np.square(self.stats_buffer[channel]["raw_data"]))) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        sum: np.float32 = self.stats_buffer[channel]["sum"] + (self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["raw_data"]) > 0 else 0.0)
-        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-1] - self.stats_buffer[channel]["raw_data"][-2]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
+        mean: np.float32 = np.sqrt(np.mean(np.square(buf["raw_data"]))) if len(buf["raw_data"]) > 0 else np.floating("nan")
+        std: np.float32 = np.std(buf["raw_data"]) if len(buf["raw_data"]) > 0 else np.floating("nan")
+        sum: np.float32 = buf["sum"] + (buf["raw_data"][-1] if len(buf["raw_data"]) > 0 else 0.0)
+        gradient: np.float32 = np.float32((buf["raw_data"][-1] - buf["raw_data"][-2]) * 1/self.polling_interval if len(buf["raw_data"]) > 1 else 0.0)
         acceleration: np.float32 = np.float32((gradient - previous_gradient) * 1/self.polling_interval)
+        output_variation: np.float32 = np.float32(buf["output_percent"][-1] - buf["output_percent"][-2]) if len(buf["output_percent"])>1 else np.float32("nan")
 
-        return {"std": std, "mean": mean, "gradient": gradient, "sum": sum, "acceleration": acceleration}
+        return {"std": std, "mean": mean, "gradient": gradient, "sum": sum, "acceleration": acceleration, "output_variation": output_variation}
 
     async def on_screen_resume(self) -> None:
         """ 
@@ -760,7 +766,7 @@ class TemperatureScreen(Screen):
             "setpoint-dragging-start": self.start_setpoint_dragging,
             "setpoint-dragging-stop": self.stop_setpoint_dragging,
             "refresh-stats-button": lambda: self.stats_buffer.clear(),
-            "start-sweep": asyncio.create_task(self.sweep_temperature()),
+            # "start-sweep": asyncio.create_task(self.sweep_temperature()),
         }
         
         handler = handlers.get(str(event.button.id))
