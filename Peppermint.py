@@ -462,7 +462,7 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container"),
                     Horizontal(Static("Output Variation:", classes="label"), Static("N/A", id="stats-output-variation", classes="label"), classes="accent-container"),
                     
-                    Horizontal(Button("?", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
+                    Horizontal(Button("", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
                     id="temperature-controller-status",
                 ), classes="container"
             )

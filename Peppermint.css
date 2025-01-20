@@ -92,7 +92,7 @@ ManualConnectionDialog {
 .tooltip {
     width: auto;
     height: auto;
-    max-width: 6;
+    max-width: 5;
     max-height: 3;
     dock: right;
     margin: 0 1;

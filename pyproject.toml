@@ -10,5 +10,4 @@ dependencies = [
     "pyvisa==1.14.1",
     "bokeh==3.6.2",
     "numpy==2.2.1 ",
-    "asyncio==3.4.3",
 ]
