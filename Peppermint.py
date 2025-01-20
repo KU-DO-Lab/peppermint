@@ -591,9 +591,9 @@ class TemperatureScreen(Screen):
 
                 # It's not very elegant, but we need the heater object to get the output of it.
                 if not self.app.simulated_mode: # type: ignore
-                    previous_output: float = self.stats_buffer[channel_name]["output_variation"]
+                    previous_output: float = float(self.query_one("#stats-output-variation", Static).children[0].render()._renderable)
                     heater_channel: LakeshoreModel336CurrentSource = self.get_channel()
-                    self.stats_buffer[channel_name]["output_variation"] = (heater_channel.output() - previous_output)
+                    self.stats_buffer[channel_name]["output_variation"].update(previous_output - heater_channel.output())
 
                 # update the widgets on screen
                 self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel_name]["mean"]))
