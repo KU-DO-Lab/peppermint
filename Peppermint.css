@@ -45,6 +45,7 @@ ManualConnectionDialog {
     width: auto;
     align-horizontal: center;
     margin: 1 1;
+    dock: bottom;
 }
 
 .info {

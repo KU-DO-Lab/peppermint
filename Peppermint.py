@@ -4,6 +4,7 @@ from numpy._core.numerictypes import floating
 import pyvisa
 import argparse
 import numpy as np
+import asyncio
 
 from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from utils.util import *
@@ -17,7 +18,7 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.containers import Horizontal, Vertical, Grid, Container
-from textual.widgets import Footer, Header, RadioButton, RadioSet, Rule, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem, Collapsible, Pretty
+from textual.widgets import Footer, Header, RadioButton, RadioSet, Rule, Static, Label, TabbedContent, TabPane, OptionList, Select, Button, Placeholder, ListView, ListItem, Collapsible, Pretty, TextArea
 
 
 @dataclass
@@ -323,6 +324,7 @@ class TemperatureScreen(Screen):
         self.update_timer = None
         self.active_channel = None
         self.is_dragging = False
+        self.is_sweeping = False
  
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
@@ -360,113 +362,7 @@ class TemperatureScreen(Screen):
             use_timestamps=True,
         )
 
-    def initialize_measurements(self) -> None:
-        """Initialize separate measurements for each channel"""
-        for param in self.app.state.read_parameters:
-            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
-                continue
-                
-            channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
             
-            # Create new measurement for this channel
-            measurement = Measurement(self.experiments[channel])
-            measurement.register_parameter(param)
-            
-            # Store measurement and create a new run (datasaver)
-            # each channel has its own datasaver, I could not get it to operate well pushing everything to one.
-            self.measurements[channel] = measurement
-            self.datasavers[channel] = measurement.run().__enter__()
-            
-    def poll_temperature_controller(self) -> None:
-        self.get_output_percentage()
-        self.get_temperatures(self.fetch_gettable_channels_and_parameters)
-        # print(self.is_dragging)
-        if self.is_dragging:
-            p = float(self.query_one("#dragging-p-field", Input).value)
-            i = float(self.query_one("#dragging-i-field", Input).value)
-            d = float(self.query_one("#dragging-d-field", Input).value)
-            threshold: float = 1.0 # stop when within 1 degree
-            target_gradient: float = float(self.query_one("#setpoint-dragging-rate-field", Input).value)
-            stop: float = float(self.query_one("#setpoint-dragging-stop-field", Input).value)
-            setp = self.guess_next_setpoint_for_dragging(threshold=threshold, stop=stop, target_gradient=target_gradient, p=p, i=i, d=d)
-
-            print(f"Mean: {self.stats_buffer["A"]["mean"]}")
-            print(f"Gradient: {self.stats_buffer["A"]["gradient"]}")
-            print(f"Acceleration: {self.stats_buffer["A"]["acceleration"]}")
-            print(f"Setpoint: {setp}")
-
-            self.go_to_setpoint(setp)
-        
-    def get_output_percentage(self) -> None:
-        if not self.allowed_temperature_monitors[0] or self.app.simulated_mode:
-            return
-
-        channel = self.get_channel()
-        if not channel:
-            return
-        
-        self.query_one("#output-percentage", Static).update(str(channel.output()))
-
-    def fetch_gettable_channels_and_parameters(self) -> Dict[str, ParameterBase]:
-        """Return the parameter to get each temperature from."""
-        channels_to_get = {}
-        for param in self.app.state.read_parameters:
-            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
-                continue
-
-            channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
-            channels_to_get[channel] = param  # Map the channel label to the parameter
-        
-        return channels_to_get
-
-    def get_temperatures(self, fetch_channels_function) -> None:
-        """Get and record temperatures for each channel."""
-
-        things_to_get: Dict[str, ParameterBase] = fetch_channels_function()
-        for channel, param in things_to_get.items():
-            # Update widget
-            if channel in self.channel_widgets:
-                value = param.get()
-                self.channel_widgets[channel].update(str(value))
-                
-                # Record data for this channel
-                # Saved to the QCoDeS run which gets started when this screen is initialized.
-                if channel in self.datasavers and self.datasavers[channel]:
-                    self.datasavers[channel].add_result( (param, value) )
-
-                # Update the plot
-                if self.plotter:
-                    current_time = time.time()
-                    self.plotter.update(channel, x=current_time, y=value)
-
-                # Update statistics
-                if channel not in self.stats_buffer:
-                    self.stats_buffer[channel] = {"raw_data": [], "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0}
-
-                self.stats_buffer[channel]["raw_data"].append(value)
-                self.get_statistics(channel)
-                self.stats_buffer[channel].update(self.get_statistics(channel))
-
-                # update the widgets on screen
-                self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel]["mean"]))
-                self.query_one("#stats-std", Static).update(str(self.stats_buffer[channel]["std"]))
-                self.query_one("#stats-gradient", Static).update(str(self.stats_buffer[channel]["gradient"]))
-                self.query_one("#stats-acceleration", Static).update(str(self.stats_buffer[channel]["acceleration"]))
-                # print(self.stats_buffer)
-
-    def get_statistics(self, channel: str) -> Dict[str, Any]:
-        """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
-
-        previous_gradient: np.float32 = self.stats_buffer[channel]["gradient"]
-
-        mean: np.float32 = np.sqrt(np.mean(np.square(self.stats_buffer[channel]["raw_data"]))) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
-        sum: np.float32 = self.stats_buffer[channel]["sum"] + (self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["raw_data"]) > 0 else 0.0)
-        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-1] - self.stats_buffer[channel]["raw_data"][-2]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
-        acceleration: np.float32 = np.float32((gradient - previous_gradient) * 1/self.polling_interval)
-
-        return {"std": std, "mean": mean, "gradient": gradient, "sum": sum, "acceleration": acceleration}
-        
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
         self.allowed_monitor_types = (LakeshoreModel336)
@@ -564,14 +460,162 @@ class TemperatureScreen(Screen):
                     Horizontal(Static("Std:", classes="label"), Static("N/A", id="stats-std", classes="label"), classes="accent-container"),
                     Horizontal(Static("Gradient:", classes="label"), Static("N/A", id="stats-gradient", classes="label"), classes="accent-container"),
                     Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container"),
+                    Horizontal(Static("Output Variation:", classes="label"), Static("N/A", id="stats-output-variation", classes="label"), classes="accent-container"),
                     
                     Horizontal(Button("", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
                     id="temperature-controller-status",
                 ), classes="container"
             )
-            yield Container()
+
+            yield Container(
+                Vertical(
+                    Static("Sweep", classes="centered-subtitle"),
+                            Horizontal(Static("Setpoints:", classes="label"), TextArea.code_editor("2, 5, 10, 20, 40", language="python", show_line_numbers=False, id="sweep-setpoints-field", classes="input-field"), classes="container"),
+                            Horizontal(Static("Action at Setpoint:", classes="label"), TextArea.code_editor("print('Hello!'), print(World!)", language="python", show_line_numbers=False, id="sweep-actions-field", classes="input-field"), classes="container"),
+                        Button("Go!", id="start-sweep", classes="confirmation"),
+                        classes="container"
+                ),
+                    classes="outlined-container"
+            )
 
         yield Footer()
+
+    def initialize_measurements(self) -> None:
+        """Initialize separate measurements for each channel"""
+        for param in self.app.state.read_parameters:
+            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
+                continue
+                
+            channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
+            
+            # Create new measurement for this channel
+            measurement = Measurement(self.experiments[channel])
+            measurement.register_parameter(param)
+            
+            # Store measurement and create a new run (datasaver)
+            # each channel has its own datasaver, I could not get it to operate well pushing everything to one.
+            self.measurements[channel] = measurement
+            self.datasavers[channel] = measurement.run().__enter__()
+            
+    def poll_temperature_controller(self) -> None:
+        self.get_output_percentage()
+        temperatures: Dict[str, float] = self.get_temperatures(self.fetch_gettable_channels_and_parameters)
+
+        if self.is_sweeping:
+            self.is_dragging = False # ensure that only one automated task with the controller is happening at once 
+
+        if self.is_dragging:
+            self.is_sweeping = False # ensure that only one automated task with the controller is happening at once 
+            p = float(self.query_one("#dragging-p-field", Input).value)
+            i = float(self.query_one("#dragging-i-field", Input).value)
+            d = float(self.query_one("#dragging-d-field", Input).value)
+            threshold: float = 1.0 # stop when within 1 degree
+            target_gradient: float = float(self.query_one("#setpoint-dragging-rate-field", Input).value)
+            stop: float = float(self.query_one("#setpoint-dragging-stop-field", Input).value)
+            setp = self.guess_next_setpoint_for_dragging(threshold=threshold, stop=stop, target_gradient=target_gradient, p=p, i=i, d=d)
+
+            print(f"Mean: {self.stats_buffer["A"]["mean"]}")
+            print(f"Gradient: {self.stats_buffer["A"]["gradient"]}")
+            print(f"Acceleration: {self.stats_buffer["A"]["acceleration"]}")
+            print(f"Instantaneous Output Variation: {self.stats_buffer["A"]["output_variation"]}")
+            print(f"Setpoint: {setp}")
+
+            self.go_to_setpoint(setp)
+        
+    def get_output_percentage(self) -> None:
+        if not self.allowed_temperature_monitors[0] or self.app.simulated_mode:
+            return
+
+        channel = self.get_channel()
+        if not channel:
+            return
+        
+        self.query_one("#output-percentage", Static).update(str(channel.output()))
+
+    def fetch_gettable_channels_and_parameters(self) -> Dict[str, ParameterBase]:
+        """Return the parameter to get each temperature from."""
+        channels_to_get = {}
+        for param in self.app.state.read_parameters:
+            if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
+                continue
+
+            channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
+            channels_to_get[channel] = param  # Map the channel label to the parameter
+        
+        return channels_to_get
+
+    async def sweep_temperature(self, setpoints: Optional[list[float]] = [], actions: Optional[list[Any]] = []) -> None:
+        """Start/Stop functionality for temperature sweeps."""
+        print(f"starting sweep")
+        try: 
+            setpoint_input = str(self.query_one("#sweep-setpoints-field", TextArea).text).split(",")
+            setpoints = list(map(float, setpoint_input))
+            print(setpoints)
+        except asyncio.CancelledError:
+            print(f"sweeps are stopping")
+        finally:
+            print(f"sweeps finished")
+
+    def get_temperatures(self, fetch_channels_function) -> Dict[str, float]:
+        """Get and record temperatures for each channel."""
+
+        data: Dict[str, float] = {}
+        things_to_get: Dict[str, ParameterBase] = fetch_channels_function()
+
+        for channel_name, param in things_to_get.items():
+            # Update widget
+            if channel_name in self.channel_widgets:
+                value = param.get()
+                self.channel_widgets[channel_name].update(str(value))
+
+                # Data to be returned
+                data[channel_name] = value
+                
+                # Record data for this channel
+                # Saved to the QCoDeS run which gets started when this screen is initialized.
+                if channel_name in self.datasavers and self.datasavers[channel_name]:
+                    self.datasavers[channel_name].add_result( (param, value) )
+
+                # Update the plot
+                if self.plotter:
+                    current_time = time.time()
+                    self.plotter.update(channel_name, x=current_time, y=value)
+
+                # Update statistics
+                if channel_name not in self.stats_buffer:
+                    self.stats_buffer[channel_name] = {"raw_data": [], "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0, "output_variation": 0.0}
+
+                self.stats_buffer[channel_name]["raw_data"].append(value)
+                self.get_statistics(channel_name)
+                self.stats_buffer[channel_name].update(self.get_statistics(channel_name))
+
+                # It's not very elegant, but we need the heater object to get the output of it.
+                if not self.app.simulated_mode: # type: ignore
+                    previous_output: float = self.stats_buffer[channel_name]["output_variation"]
+                    heater_channel: LakeshoreModel336CurrentSource = self.get_channel()
+                    self.stats_buffer[channel_name]["output_variation"].update(previous_output - heater_channel.output())
+
+                # update the widgets on screen
+                self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel_name]["mean"]))
+                self.query_one("#stats-std", Static).update(str(self.stats_buffer[channel_name]["std"]))
+                self.query_one("#stats-gradient", Static).update(str(self.stats_buffer[channel_name]["gradient"]))
+                self.query_one("#stats-acceleration", Static).update(str(self.stats_buffer[channel_name]["acceleration"]))
+                self.query_one("#stats-output-variation", Static).update(str(self.stats_buffer[channel_name]["output_variation"]))
+
+        return data
+
+    def get_statistics(self, channel: str) -> Dict[str, Any]:
+        """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
+
+        previous_gradient: np.float32 = self.stats_buffer[channel]["gradient"]
+
+        mean: np.float32 = np.sqrt(np.mean(np.square(self.stats_buffer[channel]["raw_data"]))) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
+        std: np.float32 = np.std(self.stats_buffer[channel]["raw_data"]) if len(self.stats_buffer[channel]["raw_data"]) > 0 else np.floating("nan")
+        sum: np.float32 = self.stats_buffer[channel]["sum"] + (self.stats_buffer[channel]["raw_data"][-1] if len(self.stats_buffer[channel]["raw_data"]) > 0 else 0.0)
+        gradient: np.float32 = np.float32((self.stats_buffer[channel]["raw_data"][-1] - self.stats_buffer[channel]["raw_data"][-2]) * 1/self.polling_interval if len(self.stats_buffer[channel]["raw_data"]) > 1 else 0.0)
+        acceleration: np.float32 = np.float32((gradient - previous_gradient) * 1/self.polling_interval)
+
+        return {"std": std, "mean": mean, "gradient": gradient, "sum": sum, "acceleration": acceleration}
 
     async def on_screen_resume(self) -> None:
         """ 
@@ -715,8 +759,8 @@ class TemperatureScreen(Screen):
                                        else None),
             "setpoint-dragging-start": self.start_setpoint_dragging,
             "setpoint-dragging-stop": self.stop_setpoint_dragging,
-            "refresh-stats-button": lambda: self.stats_buffer.clear()
-,
+            "refresh-stats-button": lambda: self.stats_buffer.clear(),
+            "start-sweep": asyncio.create_task(self.sweep_temperature()),
         }
         
         handler = handlers.get(str(event.button.id))
