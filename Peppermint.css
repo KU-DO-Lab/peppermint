@@ -8,6 +8,22 @@ ManualConnectionDialog {
     align: center middle;
 }
 
+.container-25 {
+    width: auto;
+    height: auto;
+    max-width: 30%;
+    min-width: 25%;
+    background: $accent;
+}
+
+.container-15 {
+    width: auto;
+    height: auto;
+    max-width: 15%;
+    min-width: 15%;
+    background: $accent;
+}
+
 .accent-container {
     height: auto;
     width: auto;
@@ -171,4 +187,15 @@ ManualConnectionDialog {
 .input-field {
     width: auto;
     height: auto;
+}
+
+/*Measurements and Sweeps*/
+#sweep-creator {
+    width: auto;
+    height: auto;
+    max-width: 40%;
+    max-height: 40%;
+    margin: 3;
+    background: $surface;
+    border: round white 10%;
 }
