@@ -5,7 +5,9 @@ from qcodes.instrument import VisaInstrument
 from textual.screen import Screen
 from textual import on
 from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Static, Label, Select, ListView, ListItem, Collapsible, Pretty
+
 
 class ParametersScreen(Screen):
     """Everything that will be displayed on the "Parameters" Tab."""

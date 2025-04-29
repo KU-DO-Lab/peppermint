@@ -43,7 +43,7 @@ class ElectronicMeasurementsScreen(Screen):
             Vertical(
                 Static("Sweep Creator", classes="label"),
                 ListView(
-                    ParameterListItem()
+                    # ParameterListItem()
                 ),
                 Button("Go!", id="create-sweep", classes="confirmation"),
                 id="sweep-creator"
