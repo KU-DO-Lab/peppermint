@@ -15,6 +15,7 @@ from textual.reactive import reactive
 from utils.InstrumentsScreen import *
 from utils.TemperatureScreen import *
 from utils.ParametersScreen import *
+from utils.SettingsScreen import *
 from utils.ElectronicMeasurementsScreen import *
 from utils.MainScreen import *
 
@@ -56,12 +57,13 @@ class Peppermint(App):
     ]
 
     SCREENS = { 
+        "main_screen": MainScreen,
         "instrument_screen": InstrumentsScreen, #type: ignore
         "parameter_screen": ParametersScreen, #type: ignore
         "temperature_screen": TemperatureScreen, #type: ignore
         "electronic_measurements_screen": ElectronicMeasurementsScreen, # type: ignore
         "manual_connection_dialog": ManualConnectionDialog, #type: ignore
-        "main_screen": MainScreen
+        "settings_screen": SettingsScreen, #type: ignore
     }
     
     def on_mount(self) -> None:

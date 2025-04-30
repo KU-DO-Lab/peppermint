@@ -27,6 +27,15 @@ class MainScreen(Screen):
     def param_button(self):
         self.app.push_screen("parameter_screen")
 
-    @on(Button.Pressed, "#isnt_button")
+    @on(Button.Pressed, "#temp_button")
     def temp_button(self):
         self.app.push_screen("temperature_screen")
+
+    @on(Button.Pressed, "#exp_button")
+    def exp_button(self):
+        self.app.push_screen("electronic_measurements_screen")
+
+    @on(Button.Pressed, "#settings_button")
+    def settings_button(self):
+        self.app.push_screen("settings_screen")
+
