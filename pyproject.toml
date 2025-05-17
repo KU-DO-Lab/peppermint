@@ -1,6 +1,12 @@
 [project]
-name = "Peppermint"
-version = "0.1"
+name = "peppermint"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Grant Saggars",email = "mumbo1002@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
 dependencies = [
     "argparse==1.4.0",
     "PyVISA-sim==0.6.0",
@@ -11,3 +17,8 @@ dependencies = [
     "bokeh==3.6.2",
     "numpy==2.2.1 ",
 ]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

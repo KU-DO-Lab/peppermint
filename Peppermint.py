@@ -23,7 +23,7 @@ from utils.MainScreen import *
 class SharedState():
     """Dataclass for keeping track of the state of the application. 
 
-    Important global variables are saved using this.
+    Important global variables (such as the parameters and what instruments are being used) are saved using this.
     """
     def __init__(self):
         super().__init__()  # must be super init-ed for reactivity.
@@ -34,7 +34,7 @@ class SharedState():
         database_path: str = ""
         
 class Peppermint(App):
-    """A Textual app to manage instruments."""
+    """The app."""
     
     def __init__(self, simulated_mode: Optional[str | None] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -69,12 +69,14 @@ class Peppermint(App):
     def on_mount(self) -> None:
         self.theme = "nord"
         self.push_screen('main_screen')
-        initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu
+        initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
 
     async def on_exit(self):
         # Perform cleanup tasks here
         print("Application is exiting. Performing cleanup...")
 
+
+# Run the application, check args at the start
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Peppermint")
     # parser.add_argument("--simulated-instruments", default=False, action="store_true", help="Run using a simulated dummy instrument")

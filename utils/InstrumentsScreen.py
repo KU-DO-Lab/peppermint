@@ -38,7 +38,11 @@ class InstrumentsScreen(Screen):
 
     @on(OptionList.OptionSelected)
     def handle_detected_instruments_optionlist_selected(self, event: OptionList.OptionSelected) -> None:
-        """Handle instrument selection from the detected instruments list."""
+        """Handle instrument selection from the detected instruments list.
+
+        Whenever an item on the list is selected, pass the ID off to the connect_instrument() 
+        function. Also takes care of errors and logging.
+        """
         # Only handle events from the detected instruments list
         if event.option_list is not self.detected_instrument_list:
             return
