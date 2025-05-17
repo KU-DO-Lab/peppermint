@@ -182,3 +182,5 @@ devenv.yaml
 devenv.lock
 .direnv
 
+*.lock
+.envrc
