@@ -31,6 +31,17 @@ Button {
   }
 }
 
+Select {
+  padding: 0 1;
+  height: 3;
+  border: none;
+  /* color: $panel; */
+
+  &:disabled {
+    opacity: 40%;
+  }
+}
+
 .container {
     height: auto;
     width: auto;
@@ -255,13 +266,6 @@ Button {
     margin: 0;
     /* padding: 0 1; */
 }
-
-.inline-select {
-    width: auto;
-    height: auto;
-    max-width: 25%;
-}
-
 
 /*Measurements and Sweeps*/
 #sweep-creator {

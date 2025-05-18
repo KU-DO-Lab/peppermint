@@ -1,5 +1,6 @@
 from typing import Any, Dict
 from qcodes.dataset import Measurement
+from qcodes.instrument import VisaInstrument
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
@@ -36,8 +37,8 @@ class SweepSequenceItem(ListItem):
 class SweepCreatorItem(ListItem):
     def __init__(self) -> None:
         super().__init__()
-        instruments = self.app.state.connected_instruments
-        self.select_options = [(instr.name, instr) for instr in instruments]
+        self.instruments = self.app.state.connected_instruments
+        self.select_options = [(instr.name, instr) for instr in self.instruments]
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -51,6 +52,15 @@ class SweepCreatorItem(ListItem):
             ),
             classes="short-listitem"
         )
+
+    async def on_screen_resume(self) -> None:
+        """ Handle the ScreenResume event. """
+
+        print("refresh!")
+        self.instruments: list[VisaInstrument] = self.app.state.connected_instruments
+        self.select_options.clear()
+        self.select_options.set_options([(instr.name, instr) for instr in self.instruments])
+
 
 class ElectronicMeasurementsScreen(Screen):
     """UI for making a sequence of actions.
@@ -113,17 +123,24 @@ class ElectronicMeasurementsScreen(Screen):
 
     def append_sweep_to_sequence(self) -> None:
         """Turn each item in the list into a single sweep and add it to the list."""
-        children = self.query_one("#sweep-info", ListView).children
-        for (i, child) in enumerate(children):
-            instrument = child.query_one("#instrument-field", Select).value
-            parameter = child.query_one("#parameter-field", Select).value
-            start = child.query_one("#start-field", Input).value
-            stop = child.query_one("#stop-field", Input).value
-            step = child.query_one("#step-field", Input).value
+        try:
+            children = self.query_one("#sweep-info", ListView).children
+            for (i, child) in enumerate(children):
+                instrument = child.query_one("#instrument-field", Select).value
+                parameter = child.query_one("#parameter-field", Select).value
+                start = child.query_one("#start-field", Input).value
+                stop = child.query_one("#stop-field", Input).value
+                step = child.query_one("#step-field", Input).value
 
-            # only implemented sweep1D atm, will upgrade to a generic later
-            sweep = Sweep1D(instrument, parameter, float(start), float(stop), float(step))
-            self.sweeps_sequence.append(SweepSequenceItem(sweep))
+                # only implemented sweep1D atm, will upgrade to a generic later
+                sweep = Sweep1D(instrument, parameter, float(start), float(stop), float(step))
+                self.sweeps_sequence.append(SweepSequenceItem(sweep))
+        except Exception as e:
+            self.notify(f"Error: {e}")
+            return 
+        
+        self.sweeps_configurator.clear()
+
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""
