@@ -28,8 +28,7 @@ class SweepSequenceItem(ListItem):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Horizontal(
-                Static("Sweep", classes="inline"),
-                Static("name", classes="inline"),
+                Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start}, stop={self.sweep.stop}, step={self.sweep.step})")
             ),
             classes="short-listitem"
         )
@@ -107,19 +106,30 @@ class ElectronicMeasurementsScreen(Screen):
                 Vertical(Static("Sweeps", classes="centered-subtitle"), classes="centered-widget"),
                 Horizontal(self.sweeps_sequence, classes="accent-container"),
                 Rule(),
+                Horizontal(
+                    Button("Start Sequence", id="start-sequence"),
+                    Button("-", classes="inline-right", id="remove-sequence-item"),
+                    classes="container-fill-horizontal",
+                ),
                 id="measurement-sequence",
             ),
         )
         yield Footer()
 
     def create_list_item(self) -> None:
-        """Append a new sweep widget to the configuration column"""
+        """Add an entry to the sweep configuration column."""
         self.sweeps_configurator.append(SweepCreatorItem())
 
     def remove_list_item(self) -> None:
-        """Append a new sweep widget to the configuration column"""
+        """Remove an entry from the sweep configuration column."""
         idx = self.sweeps_configurator.index # selected idx
         self.sweeps_configurator.pop(idx) # remove it
+
+    def remove_sequence_item(self) -> None:
+        """Remove an entry from the sequence column."""
+        idx = self.sweeps_sequence.index # selected idx
+        self.sweeps_sequence.pop(idx) # remove it
+
 
     def append_sweep_to_sequence(self) -> None:
         """Turn each item in the list into a single sweep and add it to the list."""
@@ -148,6 +158,7 @@ class ElectronicMeasurementsScreen(Screen):
             "create-list-item": self.create_list_item,
             "remove-list-item": self.remove_list_item,
             "append-sweep-to-sequence": self.append_sweep_to_sequence,
+            "remove-sequence-item": self.remove_sequence_item,
         }
 
         handler = handlers.get(str(event.button.id))
