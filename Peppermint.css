@@ -8,6 +8,12 @@ ManualConnectionDialog {
     align: center middle;
 }
 
+.outlined-container-horizontal-fill {
+    width: auto;
+    height: auto;
+    min-width: 95%
+}
+
 .container-25 {
     width: auto;
     height: auto;
@@ -52,12 +58,31 @@ ManualConnectionDialog {
     width: auto;
 }
 
+.inline-right {
+    max-height: 3;
+    width: auto;
+    max-width: 10;
+    align-horizontal: right;
+}
+
+.inline-left {
+    max-height: 3;
+    width: auto;
+    max-width: 10;
+    align-horizontal: left;
+}
+
+.short-listitem {
+    height: 4;
+    width: auto;
+}
+
 .field {
     content-align: center middle;
 }
 
 .confirmation {
-    height: auto;
+    height: 2;
     width: auto;
     align-horizontal: center;
     margin: 1 1;
@@ -135,6 +160,13 @@ ManualConnectionDialog {
     height: auto;
 }
 
+.outlined-container-horizontal-fill {
+    border: round white 10%;
+    width: auto;
+    height: auto;
+    min-width: 95%
+}
+
 /*Parameters Screen*/
 .read {
     color: #00a400;
@@ -189,12 +221,19 @@ ManualConnectionDialog {
     height: auto;
 }
 
+.inline-select {
+    width: auto;
+    height: auto;
+    max-width: 20%;
+}
+
+
 /*Measurements and Sweeps*/
 #sweep-creator {
     width: auto;
     height: auto;
-    max-width: 40%;
-    max-height: 40%;
+    max-width: 80%;
+    max-height: 95%;
     margin: 3;
     background: $surface;
     border: round white 10%;

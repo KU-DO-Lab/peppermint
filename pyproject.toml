@@ -11,11 +11,13 @@ dependencies = [
     "argparse==1.4.0",
     "PyVISA-sim==0.6.0",
     "textual==1.0.0",
-    "textual[syntax]==1.0.0",
-    "qcodes==0.50.1", 
-    "pyvisa==1.14.1",
+    "textual[syntax]==1.0.0", 
+    "pyvisa (>=1.15.0,<2.0.0)",
     "bokeh==3.6.2",
     "numpy==2.2.1 ",
+    "pyvisa-py (>=0.8.0,<0.9.0)",
+    "qcodes (>=0.52.0,<0.53.0)",
+    "textual-dev (>=1.7.0,<2.0.0)",
 ]
 
 

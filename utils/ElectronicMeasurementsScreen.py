@@ -4,22 +4,50 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import Footer, Header, ListItem, ListView, Rule, Select, Static, Button
+from textual.widgets import Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button
 
 from utils.drivers.Keithley_2450 import Keithley2450
+from utils.util import Sweep1D
 
-class ParameterListItem(ListItem):
+class SweepSequenceItem(ListItem):
     def __init__(self) -> None:
-        self.sweep_type = "Outer"
-        self.available_write_parameters = self.app.state.write_parameters
+        super().__init__()
+        ...
 
-    def on_mount(self):
-        yield ListItem(
-            Static(self.sweep_type), Select(options=self.available_write_parameters)
+class SweepCreatorItem(ListItem):
+    def __init__(self) -> None:
+        super().__init__()
+        self.instruments = self.app.state.connected_instruments # must turn this into a select later
+        print(self.instruments)
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            # Select(options=self.instruments),
+            Horizontal( 
+                Select(options=[("Voltage", 1)], classes="inline-select"), 
+                Input(placeholder="Start", type="number", classes="input-field", id="start-field"), 
+                Input(placeholder="Stop", type="number", classes="input-field", id="stop-field"), 
+                Input(placeholder="Step", type="number", classes="input-field", id="step-field"), 
+                classes="sweep-info"
+            ),
+            classes="short-listitem"
         )
 
+    def on_mount(self) -> None:
+        print(self.app.state.connected_instruments)
+        select = self.query_one(Select)
+
 class ElectronicMeasurementsScreen(Screen):
-    # BINDINGS = [("escape", "app.pop_screen", "Pop screen")]
+    """UI for making a sequence of actions.
+
+    Currently this represents sweeps. The sweeps menu is meant to be very broad and expandable. It has two parts:
+    (1) The left column begins as an empty list to which a new entry can be added. Each entry represents a sweep 1D. 
+        I am not sure how to make this clear yet, but this is how multi-parameter sweeps are implemented. Imagine 
+        the first parameter stepping once, sweeping the second parameter, then repeating. Often only one or two parameters 
+        will need to be added.
+    (2) The right column is a sequence of events, going downwards in order from top to bottom. In the future, we will plan 
+        to expand beyond sweeps and allow parameters to be sent to the sequence too.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -30,8 +58,8 @@ class ElectronicMeasurementsScreen(Screen):
         self.datasavers: Dict[str, Any] = {}
 
     def compose(self) -> ComposeResult:
-
-        self.user_sweeps_table = ListView(
+        self.sweeps_configurator = ListView(classes="outlined-container-fill-horizontal", id="sweep-info")
+        self.sweeps_sequence = ListView(
             ListItem(Static("A name:"), Static("Sweep1D()")),
             classes="info"
         )
@@ -42,28 +70,52 @@ class ElectronicMeasurementsScreen(Screen):
             # Left side info
             Vertical(
                 Static("Sweep Creator", classes="label"),
-                ListView(
-                    # ParameterListItem()
+                self.sweeps_configurator,
+                Horizontal(
+                    Button("Append to Sequence", classes="inline-left", id="append-sweep-to-sequence"),
+                    Button("+", classes="inline-right", id="create-list-item"),
+                    Button("-", classes="inline-right", id="remove-list-item"),
+                    classes="container-fill-horizontal",
                 ),
-                Button("Go!", id="create-sweep", classes="confirmation"),
-                id="sweep-creator"
+                id="sweep-creator" 
             ),
 
             # Right side information
             Vertical(
                 Vertical(Static("Sweeps", classes="centered-subtitle"), classes="centered-widget"),
-                Horizontal(self.user_sweeps_table, classes="accent-container"),
+                Horizontal(self.sweeps_sequence, classes="accent-container"),
                 Rule(),
-                # Horizontal(Button("", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget"),
-                id="temperature-controller-status",
+                id="measurement-sequence",
             ),
         )
         yield Footer()
 
+    def create_list_item(self) -> None:
+        """Append a new sweep widget to the configuration column"""
+        self.sweeps_configurator.append(SweepCreatorItem())
+
+    def remove_list_item(self) -> None:
+        """Append a new sweep widget to the configuration column"""
+        idx = self.sweeps_configurator.index # selected idx
+        self.sweeps_configurator.pop(idx) # remove it
+
+    def append_sweep_to_sequence(self) -> None:
+        """Turn each item in the list into a single sweep and add it to the list."""
+        children = self.query_one("#sweep-info", ListView).children
+        for (i, child) in enumerate(children):
+            start = child.query_one("#start-field", Input).value
+            stop = child.query_one("#stop-field", Input).value
+            step = child.query_one("#step-field", Input).value
+
+            # only implemented sweep1D atm, will upgrade to a generic later
+            # Sweep1D()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""
         handlers = {
-            "create-sweep": None
+            "create-list-item": self.create_list_item,
+            "remove-list-item": self.remove_list_item,
+            "append-sweep-to-sequence": self.append_sweep_to_sequence,
         }
 
         handler = handlers.get(str(event.button.id))

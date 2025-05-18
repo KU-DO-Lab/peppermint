@@ -28,6 +28,17 @@ import webbrowser
 import datetime
 from typing import List
 
+class Sweep1D:
+    """Simplest sweep type. Will be upgraded to a generic class in the future. """
+
+    def __init__(self, instrument: VisaInstrument, parameter: str, start: float, stop: float, step: float) -> None:
+        self.parameter = parameter 
+        self.start = start 
+        self.stop = stop 
+        self.step = step
+
+        print(dir(instrument))
+
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
 
