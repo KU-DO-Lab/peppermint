@@ -3,8 +3,10 @@ import pyvisa
 import argparse
 
 from textual.app import App
+from textual.theme import Theme
 
 from utils.util import *
+from utils.themes import *
 from typing import Optional
 from dataclasses import dataclass
 from qcodes.dataset import initialise_or_create_database_at, load_or_create_experiment
@@ -67,7 +69,11 @@ class Peppermint(App):
     }
     
     def on_mount(self) -> None:
-        self.theme = "nord"
+        available_themes: dict[str, Theme] = BUILTIN_THEMES
+        for theme in available_themes.values():
+            self.register_theme(theme)
+        self.theme = "oxocarbon"
+
         self.push_screen('main_screen')
         initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
 

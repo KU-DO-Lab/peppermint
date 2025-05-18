@@ -32,12 +32,27 @@ class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
 
     def __init__(self, instrument: VisaInstrument, parameter: str, start: float, stop: float, step: float) -> None:
+        self.instrument = instrument
         self.parameter = parameter 
         self.start = start 
         self.stop = stop 
         self.step = step
 
-        print(dir(instrument))
+    def start(self) -> None:
+        """Handler for a sweep based on the class construction."""
+        handlers = {
+            "utils.drivers.Keithley_2450.Keithley2450": self.start_keithley_sweep,
+        }
+
+        handler = handlers.get(str(type(self.instrument)))
+        if handler:
+            handler()
+
+
+    def start_keithley_sweep(self) -> None:
+        """Implementation of Keithley hardware-driven sweep."""
+        print("sweeping keithley!")
+        ...
 
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.

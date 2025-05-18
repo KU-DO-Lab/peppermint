@@ -1,11 +1,45 @@
 ManualConnectionDialog {
-    align: center middle;
+    height: 100%;
+    margin: 4 8;
+    background: $panel;
+    color: $text;
+    border: tall $background;
+    padding: 1 2;
+}
+
+KeyValueInput {
+  & Button {
+    margin: 0;
+    border-left: vkey $surface-darken-1;
+    border-right: none;
+
+    &:hover {
+      border-left: vkey $surface-darken-1;
+      border-right: none;
+    }
+  }
+}
+
+Button {
+  padding: 0 1;
+  height: 1;
+  border: none;
+  background: $panel;
+
+  &:disabled {
+    opacity: 40%;
+  }
 }
 
 .container {
     height: auto;
     width: auto;
-    align: center middle;
+    margin: 0 1;
+}
+
+.container-horizontal-fill {
+    width: 100%;
+    height: auto;
 }
 
 .outlined-container-horizontal-fill {
@@ -35,7 +69,6 @@ ManualConnectionDialog {
     width: auto;
     background: $panel;
 }
-
 
 .label {
     height: auto;
@@ -82,10 +115,10 @@ ManualConnectionDialog {
 }
 
 .confirmation {
-    height: 2;
-    width: auto;
+    height: auto;
+    width: 90%;
     align-horizontal: center;
-    margin: 1 1;
+    margin: 0 1;
     dock: bottom;
 }
 
@@ -216,15 +249,17 @@ ManualConnectionDialog {
     content-align: center middle;
 }
 
-.input-field {
+.inline {
     width: auto;
-    height: auto;
+    height: 3;
+    margin: 0;
+    /* padding: 0 1; */
 }
 
 .inline-select {
     width: auto;
     height: auto;
-    max-width: 20%;
+    max-width: 25%;
 }
 
 

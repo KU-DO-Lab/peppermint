@@ -3,39 +3,54 @@ from qcodes.dataset import Measurement
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widget import Widget
 from textual.widgets import Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button
 
 from utils.drivers.Keithley_2450 import Keithley2450
 from utils.util import Sweep1D
 
 class SweepSequenceItem(ListItem):
-    def __init__(self) -> None:
-        super().__init__()
-        ...
+    """Widget and runner implementation for a sweep.
 
-class SweepCreatorItem(ListItem):
-    def __init__(self) -> None:
+    Displays as an entry in the rightmost column of the screen. This is responsible for:
+    (1) Returning and the widget to be rendered
+    (2) Handling reactive changes to the widget, including color changes to indicate run status
+    (3) Handling the sweep for the objects contained in the widget: e.g. some outer function loops 
+    over each sweep to be called down the list by making calls to this class.
+
+    Currently takes Sweep1D objects, which are slated to be replaced with generic sweeps in the future.
+    """
+    def __init__(self, sweep: Sweep1D) -> None:
         super().__init__()
-        self.instruments = self.app.state.connected_instruments # must turn this into a select later
-        print(self.instruments)
+        self.sweep: Sweep1D = sweep
+        self.active: bool = False
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            # Select(options=self.instruments),
-            Horizontal( 
-                Select(options=[("Voltage", 1)], classes="inline-select"), 
-                Input(placeholder="Start", type="number", classes="input-field", id="start-field"), 
-                Input(placeholder="Stop", type="number", classes="input-field", id="stop-field"), 
-                Input(placeholder="Step", type="number", classes="input-field", id="step-field"), 
-                classes="sweep-info"
+            Horizontal(
+                Static("Sweep", classes="inline"),
+                Static("name", classes="inline"),
             ),
             classes="short-listitem"
         )
 
-    def on_mount(self) -> None:
-        print(self.app.state.connected_instruments)
-        select = self.query_one(Select)
+class SweepCreatorItem(ListItem):
+    def __init__(self) -> None:
+        super().__init__()
+        instruments = self.app.state.connected_instruments
+        self.select_options = [(instr.name, instr) for instr in instruments]
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Horizontal( 
+                Select(options=self.select_options, classes="inline-select", id="instrument-field"), 
+                Select(options=[("Voltage", 1)], classes="inline-select", id="parameter-field"), 
+                Input(placeholder="Start", type="number", classes="inline", id="start-field"), 
+                Input(placeholder="Stop", type="number", classes="inline", id="stop-field"), 
+                Input(placeholder="Step", type="number", classes="inline", id="step-field"), 
+                classes="sweep-info"
+            ),
+            classes="short-listitem"
+        )
 
 class ElectronicMeasurementsScreen(Screen):
     """UI for making a sequence of actions.
@@ -59,10 +74,7 @@ class ElectronicMeasurementsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         self.sweeps_configurator = ListView(classes="outlined-container-fill-horizontal", id="sweep-info")
-        self.sweeps_sequence = ListView(
-            ListItem(Static("A name:"), Static("Sweep1D()")),
-            classes="info"
-        )
+        self.sweeps_sequence = ListView(classes="info", id="sweep-sequence")
 
         yield Header()
         yield Horizontal(
@@ -103,12 +115,15 @@ class ElectronicMeasurementsScreen(Screen):
         """Turn each item in the list into a single sweep and add it to the list."""
         children = self.query_one("#sweep-info", ListView).children
         for (i, child) in enumerate(children):
+            instrument = child.query_one("#instrument-field", Select).value
+            parameter = child.query_one("#parameter-field", Select).value
             start = child.query_one("#start-field", Input).value
             stop = child.query_one("#stop-field", Input).value
             step = child.query_one("#step-field", Input).value
 
             # only implemented sweep1D atm, will upgrade to a generic later
-            # Sweep1D()
+            sweep = Sweep1D(instrument, parameter, float(start), float(stop), float(step))
+            self.sweeps_sequence.append(SweepSequenceItem(sweep))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""

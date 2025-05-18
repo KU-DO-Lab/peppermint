@@ -15,16 +15,16 @@ class ManualConnectionDialog(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label("Manual Connection", id="title"),
+            Label("Manual Connection", id="title", classes="title"),
             Horizontal(            
                 Select(options=[("Keithley", "keithley"), ("Lakeshore", "lakeshore")], id="instrument-type", classes="inline-select"),
-                Input(placeholder="Address", id="instrument-address", classes="input-field"),
-                classes="container"
+                Input(placeholder="Address", id="instrument-address", classes="inline"),
+                classes="container-fill-horizontal"
             ),
             Horizontal(
                 Button("Cancel", variant="primary", id="cancel"),
                 Button("Confirm", variant="primary", id="confirm"),
-                classes="container"
+                classes="confirmation"
             ),
             id="dialog",
         )
@@ -44,8 +44,6 @@ class ManualConnectionDialog(ModalScreen):
         """Connect to an instrument and update the connected instruments list. """
         # TODO: need to prompt for an instrument name here
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
-        print(instrument_type)
-        print(instrument_address)
 
         if simulated_override: 
             new_instrument = auto_connect_instrument(name=f"simulated_{instrument_type}", address=instrument_address)
