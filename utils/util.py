@@ -52,7 +52,7 @@ class Sweep1D:
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
         ...
 
-    def start_keithley_sweep(self) -> None:
+    async def start_keithley_sweep(self) -> None:
         """Implementation of Keithley 2450 hardware-driven sweep."""
 
         print("sweeping keithley!")
@@ -96,23 +96,25 @@ class ActionSequence:
     def __init__(self, sequence: list[Sweep1D]):
         self.sequence = sequence
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Initialize the first sweep in the sequence, create a worker thread, and progress the sequence.
 
         Implementations of sweeps in QCoDeS follows the pattern of the function returning implying it finishes. 
         Therefore a timer will not be used
         """
 
-        print("entering runner")
+        for (i, fn) in enumerate(self.sequence):
+            print(f"sweeping {i}")
+            fn.start()
 
-        def run_sequence() -> None:
-            for (i, f) in enumerate(self.sequence):
-                print(f"sweeping {i}")
-                f.start()
-
-        thread = threading.Thread(target=run_sequence)
-        thread.start()
-        thread.join() # block the thread until it finishes
+        # def run_sequence() -> None:
+        #     for (i, f) in enumerate(self.sequence):
+        #         print(f"sweeping {i}")
+        #         f.start()
+        #
+        # thread = threading.Thread(target=run_sequence)
+        # thread.start()
+        # thread.join() # block the thread until it finishes
 
     def pause(self) -> None:
         """Pauses the current sweep."""

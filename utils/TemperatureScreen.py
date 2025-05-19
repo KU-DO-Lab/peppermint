@@ -11,7 +11,7 @@ from qcodes.parameters import GroupParameter, ParameterBase
 from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, Container
-from textual.widgets import Footer, Header, RadioButton, RadioSet, Rule, Static, TabbedContent, Button, ListView, ListItem, TextArea
+from textual.widgets import Footer, Header, Input, RadioButton, RadioSet, Rule, Static, TabbedContent, Button, ListView, ListItem, TextArea
 
 class TemperatureScreen(Screen):
     """The screen containing information related to the temperature controllers."""
