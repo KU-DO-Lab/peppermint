@@ -4,6 +4,7 @@ from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
 from bokeh.models import DatetimeTickFormatter
 import pyvisa
+from qcodes.dataset import Measurement, initialise_database, new_experiment, plot_dataset
 from qcodes.instrument import VisaInstrument
 from textual.widgets import OptionList, Select, Input
 from typing import Optional, Dict, List, Any
@@ -34,24 +35,120 @@ class Sweep1D:
     def __init__(self, instrument: VisaInstrument, parameter: str, start: float, stop: float, step: float) -> None:
         self.instrument = instrument
         self.parameter = parameter 
-        self.start = start 
-        self.stop = stop 
-        self.step = step
+        self.start_val = start
+        self.stop_val = stop 
+        self.step_val = step
+        self.done_signal = threading.Event
 
     def start(self) -> None:
         """Handler for a sweep based on the class construction."""
         handlers = {
-            "utils.drivers.Keithley_2450.Keithley2450": self.start_keithley_sweep,
+            Keithley2450: self.start_keithley_sweep,
         }
 
-        handler = handlers.get(str(type(self.instrument)))
+        handler = handlers.get(type(self.instrument)) # type: ignore
         if handler:
             handler()
 
+    def connect_to_database(self) -> None:
+        """Append an entry to the tracked parameters and ensure it appears in the database/experiment."""
+        # initialise_database()
+        # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
+        ...
 
     def start_keithley_sweep(self) -> None:
-        """Implementation of Keithley hardware-driven sweep."""
+        """Implementation of Keithley 2450 hardware-driven sweep."""
+
         print("sweeping keithley!")
+
+        initialise_database()
+        experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
+
+        keithley = self.instrument
+        keithley.sense.function("voltage")
+        keithley.sense.auto_range(True)
+
+        keithley.source.function("current")
+        keithley.source.auto_range(True)
+        keithley.source.limit(2)
+        keithley.source.sweep_setup(0, 1e-6, 10)
+
+        keithley.sense.four_wire_measurement(True)
+
+        meas = Measurement(exp=experiment)
+        meas.register_parameter(keithley.sense.sweep)
+
+        with meas.run() as datasaver:
+            datasaver.add_result(
+                (keithley.source.sweep_axis, keithley.source.sweep_axis()),
+                (keithley.sense.sweep, keithley.sense.sweep()),
+            )
+
+            dataid = datasaver.run_id
+
+        plot_dataset(datasaver.dataset)
+
+        return
+
+        # self.instrument.sense.function("voltage")
+        # self.instrument.sense.auto_range(True)
+        # self.instrument.source.function("current")
+        # self.instrument.source.auto_range(True)
+        # self.instrument.source.limit(2)
+        # self.instrument.source.sweep_setup(self.start_val, self.step_val, self.stop_val)
+        #
+        # # will require double checking what our config uses by default
+        # self.instrument.sense.four_wire_measurement(fwm)
+        #
+        # # meas = self.app.state.measurement
+        # # with meas.run() as datasaver:
+        # #     datasaver.add_result(
+        # #         (self.instrument.source.sweep_axis, self.instrument.source.sweep_axis()),
+        # #         (self.instrument.sense.sweep, self.instrument.sense.sweep()),
+        # #     )
+        # #
+        # # dataid = datasaver.run_id
+
+class ActionSequence:
+    """Does the measuring.
+
+    Encompasses the following tasks:
+    (1) Sequentially operates to safely start any number of sweeps/sets, one at a time.
+    (2) Automatically progress to the next action in the sequence.
+    (3) Provides access to the satus of the sequence.
+    """
+
+    def __init__(self, sequence: list[Sweep1D]):
+        self.sequence = sequence
+
+    def start(self) -> None:
+        """Initialize the first sweep in the sequence, create a worker thread, and progress the sequence.
+
+        Implementations of sweeps in QCoDeS follows the pattern of the function returning implying it finishes. 
+        Therefore a timer will not be used
+        """
+
+        print("entering runner")
+
+        def run_sequence() -> None:
+            for (i, f) in enumerate(self.sequence):
+                print(f"sweeping {i}")
+                f.start()
+
+        thread = threading.Thread(target=run_sequence)
+        thread.start()
+        thread.join() # block the thread until it finishes
+
+    def pause(self) -> None:
+        """Pauses the current sweep."""
+        ...
+
+    def stop(self) -> None:
+        """Totally stops the sequence. Requires status to be paused to prevent accidental stops."""
+        ...
+
+    def status(self) -> tuple[str, int]:
+        """Returns (start/idle/paused, index)"""
         ...
 
 class SimpleLivePlotter:

@@ -102,7 +102,7 @@ class InstrumentsScreen(Screen):
             logging.error(f"Failed to connect to {instrument_address}: {e}")
 
     def connect_instrument(self, instrument_address: str, simulated_override: bool = False) -> None:
-        """Connect to an instrument and update the connected instruments list. """
+        """Connect to an instrument and update the connected instruments list."""
         # TODO: need to prompt for an instrument name here
         # Do the connection procses here- right now it just tries the auto-connect, but we will later handle manual connections here
         if self.app.simulated_mode or simulated_override: 

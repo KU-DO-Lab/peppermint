@@ -7,7 +7,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button
 
 from utils.drivers.Keithley_2450 import Keithley2450
-from utils.util import Sweep1D
+from utils.util import ActionSequence, Sweep1D
 
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.
@@ -28,7 +28,7 @@ class SweepSequenceItem(ListItem):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Horizontal(
-                Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start}, stop={self.sweep.stop}, step={self.sweep.step})")
+                Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start_val}, stop={self.sweep.stop_val}, step={self.sweep.step_val})")
             ),
             classes="short-listitem"
         )
@@ -151,6 +151,13 @@ class ElectronicMeasurementsScreen(Screen):
         
         self.sweeps_configurator.clear()
 
+    def start_sequence(self) -> None:
+        """Extract action object (sweep, set) from the elements in the sequence and start the runner."""
+        actions = [fn.sweep for fn in self.sweeps_sequence.children]
+        runner = ActionSequence(actions)
+        print("starting runner")
+        runner.start()
+
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""
@@ -159,6 +166,7 @@ class ElectronicMeasurementsScreen(Screen):
             "remove-list-item": self.remove_list_item,
             "append-sweep-to-sequence": self.append_sweep_to_sequence,
             "remove-sequence-item": self.remove_sequence_item,
+            "start-sequence": self.start_sequence,
         }
 
         handler = handlers.get(str(event.button.id))
