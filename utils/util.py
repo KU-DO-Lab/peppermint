@@ -1,15 +1,12 @@
-from bokeh.plotting import figure, curdoc
+from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
-from bokeh.models import DatetimeTickFormatter
 import pyvisa
 from qcodes.dataset import Measurement, initialise_database, new_experiment, plot_dataset
 from qcodes.instrument import VisaInstrument
-from textual.widgets import OptionList, Select, Input
-from typing import Optional, Dict, List, Any
+from typing import Optional, List
 import time, datetime
-# from datetime import fromtimestamp
 import webbrowser # to open the bokeh plot automatically without blocking the terminal
 from queue import Queue
 import threading
@@ -17,8 +14,7 @@ from collections import deque
 from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
 
-from bokeh.plotting import figure, show
-from bokeh.io import output_file, push_notebook
+from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.palettes import Spectral11
 from queue import Queue
@@ -87,27 +83,6 @@ class Sweep1D:
             dataid = datasaver.run_id
 
         plot_dataset(datasaver.dataset)
-
-        return
-
-        # self.instrument.sense.function("voltage")
-        # self.instrument.sense.auto_range(True)
-        # self.instrument.source.function("current")
-        # self.instrument.source.auto_range(True)
-        # self.instrument.source.limit(2)
-        # self.instrument.source.sweep_setup(self.start_val, self.step_val, self.stop_val)
-        #
-        # # will require double checking what our config uses by default
-        # self.instrument.sense.four_wire_measurement(fwm)
-        #
-        # # meas = self.app.state.measurement
-        # # with meas.run() as datasaver:
-        # #     datasaver.add_result(
-        # #         (self.instrument.source.sweep_axis, self.instrument.source.sweep_axis()),
-        # #         (self.instrument.sense.sweep, self.instrument.sense.sweep()),
-        # #     )
-        # #
-        # # dataid = datasaver.run_id
 
 class ActionSequence:
     """Does the measuring.
@@ -266,79 +241,6 @@ class SimpleLivePlotter:
         if self.server:
             self.server.stop()
 
-
-
-# class ParameterWidget(Widget):
-#     def __init__(self, param):
-#         super().__init__()
-#         self.param: ParameterBase = param
-#         self.update_timer = None
-#
-#     def compose(self) -> ComposeResult:
-#         yield Collapsible(
-#             Pretty(self.param.get()),
-#             Horizontal(
-#                 Static("Live Update:     ", classes="label"), 
-#                 Switch(id="live_toggle", value=False),
-#                 classes="container"
-#             ),
-#             Input(id="update_freq", placeholder="Update Frequency (hz)"),
-#             classes="parameter_entry",
-#             title=self.param.full_name,
-#         )
-#
-#     async def on_screen_suspend(self):
-#         """When the screen is suspended pause everything"""
-#         self.stop_updates()
-#
-#     async def on_screen_resume(self) -> None:
-#         """restore previous state on screen resume"""
-#         self.update_timer = self.set_interval(1.0, self.update_value)
-#         self.restart_updates(self.update_timer)
-#
-#     def on_switch_changed(self, event: Switch.Changed) -> None:
-#         if event.switch.value:
-#             self.start_updates()
-#         else:
-#             self.stop_updates()
-#
-#     def on_input_changed(self, event: Input.Changed) -> None:
-#         if event.input.value:
-#             try:
-#                 freq = float(event.input.value)
-#                 self.restart_updates(freq)
-#             except ValueError:
-#                 pass
-#
-#     def on_mount(self) -> None:
-#         self.start_updates()
-#
-#     def start_updates(self, freq=1.0):
-#         self.stop_updates()
-#         self.update_timer = self.set_interval(1/freq, self.update_value)
-#
-#     def stop_updates(self):
-#         if self.update_timer:
-#             self.update_timer.stop()
-#
-#     def restart_updates(self, freq):
-#         self.start_updates(freq)
-#
-#     def update_value(self):
-#         self.query_one(Pretty).update(self.param.get())
-
-def update_option_list(option_list: OptionList, items: list):
-    """Helper method to update an OptionList's contents."""
-    option_list.clear_options()
-    for item in items:
-        option_list.add_option(item)
-
-def update_select(select_list: Select, items: list):
-    """Helper method to update an Select's contents."""
-    select_list.set_options(
-        [(element, element) for element in items]
-    )
-
 def match_instrument_name_to_object(name: str, instrument_list) -> Optional[VisaInstrument]:
     """
     Fields on screen have to be rendered using the instrument's name field, since we can't just write an instrument 
@@ -355,9 +257,11 @@ def match_instrument_name_to_object(name: str, instrument_list) -> Optional[Visa
 def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     """
     Attempts to automatically detect and connect to an instrument by querying IDN
-    the result is matched to a driver and instantiate a connection and return
+    the result is matched to a driver and instantiate a connection and return the instrument itself
 
-    This should return with the instrument object. Need to add type hinting
+    TODO:
+    - Type hinting
+    - Prompt for name
     """
 
     # If we need to test without access to the lab hardware, just create a dummy instrument
