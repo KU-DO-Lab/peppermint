@@ -63,22 +63,32 @@ class Sweep1D:
 
         print("sweeping keithley!")
 
-        initialise_database()
-        experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
-
+        # initialise_database()
+        # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
+        self.instrument.reset()
         self.instrument.get_idn()
+        self.instrument.output_enabled.set_to(True)
+
+        self.instrument.terminals("front")
+        self.instrument.source.function("current")
+        self.instrument.source.current(1e-6)  # Put 1uA through the resistor
+        current_setpoint = self.instrument.source.current()
+
+        voltage = self.instrument.sense.function("voltage")
+        with self.instrument.output_enabled.set_to(True):
+            voltage = self.instrument.sense.voltage()
+
+        print("Approx. resistance: ", voltage / current_setpoint)
 
 
+        # self.instrument.sense.function("voltage")
+        # self.instrument.sense.auto_range(True)
         #
-        # keithley = self.instrument
-        # keithley.sense.function("voltage")
-        # keithley.sense.auto_range(True)
-        #
-        # keithley.source.function("current")
-        # keithley.source.auto_range(True)
-        # keithley.source.limit(2)
-        # keithley.source.sweep_setup(0, 1e-6, 10)
-        #
+        # self.instrument.source.function("current")
+        # self.instrument.source.auto_range(True)
+        # self.instrument.source.limit(2)
+        # self.instrument.source.sweep_setup(0, 1e-6, 10)
+
         # keithley.sense.four_wire_measurement(True)
         #
         # meas = Measurement(exp=experiment)
