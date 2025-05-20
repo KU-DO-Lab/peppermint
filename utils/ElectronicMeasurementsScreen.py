@@ -157,7 +157,7 @@ class ElectronicMeasurementsScreen(Screen):
         runner = ActionSequence(actions)
         print("starting runner")
         runner.start()
-
+        runner.run()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""

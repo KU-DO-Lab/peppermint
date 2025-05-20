@@ -66,29 +66,33 @@ class Sweep1D:
         initialise_database()
         experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
 
-        keithley = self.instrument
-        keithley.sense.function("voltage")
-        keithley.sense.auto_range(True)
+        self.instrument.get_idn()
 
-        keithley.source.function("current")
-        keithley.source.auto_range(True)
-        keithley.source.limit(2)
-        keithley.source.sweep_setup(0, 1e-6, 10)
 
-        keithley.sense.four_wire_measurement(True)
-
-        meas = Measurement(exp=experiment)
-        meas.register_parameter(keithley.sense.sweep)
-
-        with meas.run() as datasaver:
-            datasaver.add_result(
-                (keithley.source.sweep_axis, keithley.source.sweep_axis()),
-                (keithley.sense.sweep, keithley.sense.sweep()),
-            )
-
-            dataid = datasaver.run_id
-
-        plot_dataset(datasaver.dataset)
+        #
+        # keithley = self.instrument
+        # keithley.sense.function("voltage")
+        # keithley.sense.auto_range(True)
+        #
+        # keithley.source.function("current")
+        # keithley.source.auto_range(True)
+        # keithley.source.limit(2)
+        # keithley.source.sweep_setup(0, 1e-6, 10)
+        #
+        # keithley.sense.four_wire_measurement(True)
+        #
+        # meas = Measurement(exp=experiment)
+        # meas.register_parameter(keithley.sense.sweep)
+        #
+        # with meas.run() as datasaver:
+        #     datasaver.add_result(
+        #         (keithley.source.sweep_axis, keithley.source.sweep_axis()),
+        #         (keithley.sense.sweep, keithley.sense.sweep()),
+        #     )
+        #
+        #     dataid = datasaver.run_id
+        #
+        # plot_dataset(datasaver.dataset)
 
 class ActionSequence:
     """Does the measuring.
