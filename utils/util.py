@@ -2,6 +2,7 @@ from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
+from numpy import nan
 import pyvisa
 from qcodes.dataset import Measurement, initialise_database, new_experiment, plot_dataset
 from qcodes.instrument import VisaInstrument
@@ -21,6 +22,7 @@ from queue import Queue
 from collections import deque
 import time
 import threading
+import concurrent.futures
 import webbrowser
 import datetime
 from typing import List
@@ -52,7 +54,7 @@ class Sweep1D:
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
         ...
 
-    async def start_keithley_sweep(self) -> None:
+    def start_keithley_sweep(self) -> None:
         """Implementation of Keithley 2450 hardware-driven sweep."""
 
         print("sweeping keithley!")
@@ -95,38 +97,41 @@ class ActionSequence:
 
     def __init__(self, sequence: list[Sweep1D]):
         self.sequence = sequence
+        self.executor: None | concurrent.futures.ThreadPoolExecutor = None
+        self.idx = int(nan) # Index of the sequence
 
-    async def start(self) -> None:
-        """Initialize the first sweep in the sequence, create a worker thread, and progress the sequence.
+    def start(self) -> None:
+        if self.executor == None:
+            self.executor =  concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-        Implementations of sweeps in QCoDeS follows the pattern of the function returning implying it finishes. 
-        Therefore a timer will not be used
+    def run(self) -> None:
+        """Set up the sequence and run.
+
+        Currently implemented as a concurrent.futures executor to avoid blocking.
         """
-
-        for (i, fn) in enumerate(self.sequence):
-            print(f"sweeping {i}")
-            fn.start()
-
-        # def run_sequence() -> None:
-        #     for (i, f) in enumerate(self.sequence):
-        #         print(f"sweeping {i}")
-        #         f.start()
-        #
-        # thread = threading.Thread(target=run_sequence)
-        # thread.start()
-        # thread.join() # block the thread until it finishes
-
-    def pause(self) -> None:
-        """Pauses the current sweep."""
-        ...
+        if self.executor == None:
+            ... # will have to work out how to notify properly here
+        else:
+            for (i, fn) in enumerate(self.sequence):
+                print(f"sweeping {i}")
+                future = self.executor.submit(fn.start)
+                result = future.result()  # Blocks until the function is done
+                self.idx = i
+                print(f"Signal: {result}")
 
     def stop(self) -> None:
         """Totally stops the sequence. Requires status to be paused to prevent accidental stops."""
-        ...
+        if self.executor:
+            self.executor.shutdown(wait=True, cancel_futures=True)
+            self.executor = None
+            self.idx = int(nan)
 
     def status(self) -> tuple[str, int]:
-        """Returns (start/idle/paused, index)"""
-        ...
+        """Returns (running/idle, index)"""
+        if self.executor == None: 
+            return ("idle", int(nan))
+        else:
+            return ("running", self.idx)
 
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
