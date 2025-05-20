@@ -163,15 +163,17 @@ Select {
     background: $surface;
 }
 
-#title {
-    column-span: 2;
-    height: 1fr;
-    width: 1fr;
-    content-align: center middle;
-}
-
 #short-container {
     height: 25%;
+}
+
+.title {
+    column-span: 2;
+    height: 2;
+    margin: 1 1;
+    text-style: bold;
+    width: 100%;
+    content-align: center middle;
 }
 
 .tooltip {

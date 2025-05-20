@@ -2,7 +2,6 @@ from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
-from numpy import nan
 import pyvisa
 from qcodes.dataset import Measurement, initialise_database, new_experiment, plot_dataset
 from qcodes.instrument import VisaInstrument
@@ -12,6 +11,11 @@ import webbrowser # to open the bokeh plot automatically without blocking the te
 from queue import Queue
 import threading
 from collections import deque
+
+from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
 
@@ -98,7 +102,7 @@ class ActionSequence:
     def __init__(self, sequence: list[Sweep1D]):
         self.sequence = sequence
         self.executor: None | concurrent.futures.ThreadPoolExecutor = None
-        self.idx = int(nan) # Index of the sequence
+        self.idx = -1 # Index of the sequence
 
     def start(self) -> None:
         if self.executor == None:
@@ -124,12 +128,12 @@ class ActionSequence:
         if self.executor:
             self.executor.shutdown(wait=True, cancel_futures=True)
             self.executor = None
-            self.idx = int(nan)
+            self.idx = -1
 
     def status(self) -> tuple[str, int]:
         """Returns (running/idle, index)"""
         if self.executor == None: 
-            return ("idle", int(nan))
+            return ("idle", -1)
         else:
             return ("running", self.idx)
 
@@ -300,3 +304,17 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
         case "4G":
             ...
     return new_dev
+
+class MeasurementInitializerDialog(ModalScreen):
+    def __init__(self):
+        ...
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Static("Initialize a Measurement", classes="title"), 
+            Horizontal(
+                Static("Path: ", classes="inline"), Input(placeholder=f"{datetime.date.day}/{datetime.date.month}/{datetime.date.year}", classes="inline"), 
+                Static("Path: ", classes="inline"), Input(placeholder="./Experiments/", classes="inline"), 
+                classes="container-fill-horizontal"
+            )
+        )

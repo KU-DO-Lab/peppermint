@@ -2,6 +2,7 @@ import os
 import pyvisa
 import argparse
 
+from qcodes.dataset.experiment_container import Experiment
 from textual.app import App
 from textual.theme import Theme
 
@@ -34,6 +35,7 @@ class SharedState():
         read_parameters: reactive[list[Parameter]] = reactive(list)
         write_parameters: reactive[list[Parameter]] = reactive(list)
         database_path: str = ""
+        experiment: Experiment | None = None 
         
 class Peppermint(App):
     """The app."""
@@ -47,6 +49,7 @@ class Peppermint(App):
         self.state.write_parameters = []
         self.state.read_parameters = []
         self.state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
+        self.state.experiment = None 
 
     CSS_PATH = "Peppermint.css"
 
@@ -66,6 +69,7 @@ class Peppermint(App):
         "electronic_measurements_screen": ElectronicMeasurementsScreen, # type: ignore
         "manual_connection_dialog": ManualConnectionDialog, #type: ignore
         "settings_screen": SettingsScreen, #type: ignore
+        "measurement_initializer_dialog": MeasurementInitializerDialog,
     }
     
     def on_mount(self) -> None:
@@ -75,11 +79,11 @@ class Peppermint(App):
         self.theme = "oxocarbon"
 
         self.push_screen('main_screen')
-        initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
+        # initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
 
-    async def on_exit(self):
-        # Perform cleanup tasks here
-        print("Application is exiting. Performing cleanup...")
+    # async def on_exit(self):
+    #     # Perform cleanup tasks here
+    #     print("Application is exiting. Performing cleanup...")
 
 
 # Run the application, check args at the start
