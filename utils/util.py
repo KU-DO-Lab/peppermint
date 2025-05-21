@@ -31,6 +31,8 @@ import webbrowser
 import datetime
 from typing import List
 
+from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
+
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
 
@@ -289,11 +291,15 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     - Prompt for name
     """
 
+    print(name)
+
     # If we need to test without access to the lab hardware, just create a dummy instrument
     if name == "simulated_lakeshore":
         return LakeshoreModel336("simulated_lakeshore336", address="GPIB::2::INSTR", pyvisa_sim_file="lakeshore_model336.yaml")
     elif name == "simulated_keithley":
         return Keithley2450("simulated_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
+    elif name == "simulated_cryomagnetics4g":
+        return CryomagneticsModel4G("simulated_cryomagnetics4g", address="GPIB::1::INSTR", pyvisa_sim_file="cryo4g.yaml", max_current_limits={0: (0.0, 0.0)}, coil_constant=10.0,)
 
     rm = pyvisa.ResourceManager()
     inst = rm.open_resource(address)

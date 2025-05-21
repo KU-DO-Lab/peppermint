@@ -17,7 +17,7 @@ class ManualConnectionDialog(ModalScreen):
         yield Vertical(
             Label("Manual Connection", id="title", classes="title"),
             Horizontal(            
-                Select(options=[("Keithley", "keithley"), ("Lakeshore", "lakeshore")], id="instrument-type", classes="inline-select"),
+                Select(options=[("Keithley", "keithley"), ("Lakeshore", "lakeshore"), ("Cryomagnetics Model 4G", "cryomagnetics4g")], id="instrument-type", classes="inline-select"),
                 Input(placeholder="Address", id="instrument-address", classes="inline"),
                 classes="container-fill-horizontal"
             ),
