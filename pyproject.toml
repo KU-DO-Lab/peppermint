@@ -3,7 +3,8 @@ name = "peppermint"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Grant Saggars",email = "mumbo1002@gmail.com"}
+    {name = "Grant Saggars",email = "mumbo1002@gmail.com"},
+    {name = "Vivek Jain",email = "jainx1234@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
