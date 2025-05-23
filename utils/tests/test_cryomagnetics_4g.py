@@ -15,7 +15,6 @@ from utils.drivers.M4G_qcodes_official import (
     CryomagneticsOperatingState,
 )
 
-
 @pytest.fixture(name="cryo_instrument", scope="function")
 def fixture_cryo_instrument():
     """

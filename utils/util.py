@@ -47,7 +47,8 @@ class Sweep1D:
     def start(self) -> None:
         """Handler for a sweep based on the class construction."""
         handlers = {
-            Keithley2450: self.start_keithley_sweep,
+            Keithley2450: self.start_keithley2450_sweep,
+            CryomagneticsModel4G: self.start_cryomagneticsm4g_sweep,
         }
 
         handler = handlers.get(type(self.instrument)) # type: ignore
@@ -60,16 +61,25 @@ class Sweep1D:
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
         ...
 
-    def start_keithley_sweep(self) -> None:
-        """Implementation of Keithley 2450 hardware-driven sweep."""
+    def start_cryomagneticsm4g_sweep(self) -> None:
+        """Dispatch for the Cryomagnetics Model 4G sweep.
+
+        The model 4G effectively exposes 2 parameters: ramp rate and setpoint.
+        Sweeps are accomplished by setting the first end of the sweep, ramping there, then repeating
+        for the tail end of the sweep.
+        """
+        self.instrument.reset()
+        self.instrument.operating_mode(True) # remote mode
+
+    def start_keithley2450_sweep(self) -> None:
+        """Dispatch for the Keithley 2450 hardware-driven sweep."""
 
         print("sweeping keithley!")
 
         # initialise_database()
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
-        self.instrument.reset()
-        self.instrument.get_idn()
         self.instrument.output_enabled.set_to(True)
+        self.instrument.reset()
 
         self.instrument.terminals("front")
         self.instrument.source.function("current")

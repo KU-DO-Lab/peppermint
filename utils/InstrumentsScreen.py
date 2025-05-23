@@ -5,7 +5,7 @@ from utils.util import *
 from textual import on
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.containers import Horizontal, Vertical, Grid
+from textual.containers import Center, Horizontal, Vertical, Grid
 from textual.widgets import Footer, Header, Input, Label, OptionList, Button, Placeholder, Select
 
 class ManualConnectionDialog(ModalScreen):
