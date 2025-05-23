@@ -10,7 +10,7 @@ from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListVi
 
 from utils.drivers.Keithley_2450 import Keithley2450
 from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
-from utils.util import ActionSequence, Sweep1D
+from utils.util import ActionSequence, Sweep1D, safe_query_value
 
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.
@@ -30,9 +30,7 @@ class SweepSequenceItem(ListItem):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Horizontal(
-                Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start_val}, stop={self.sweep.stop_val}, step={self.sweep.step_val})")
-            ),
+            Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start_val}, stop={self.sweep.stop_val}, step={self.sweep.step_val})"),
             classes="short-listitem"
         )
 
@@ -211,14 +209,21 @@ class ElectronicMeasurementsScreen(Screen):
         try:
             children = self.query_one("#sweep-info", ListView).children
             for (i, child) in enumerate(children):
-                instrument = child.query_one("#instrument-field", Select).value
-                parameter = child.query_one("#parameter-field", Select).value
-                start = child.query_one("#start-field", Input).value
-                stop = child.query_one("#stop-field", Input).value
-                step = child.query_one("#step-field", Input).value
+                instrument = safe_query_value(child, "#instrument-field", Select)
+                parameter = safe_query_value(child, "#parameter-field", Select)
+                start = safe_query_value(child, "#start-field", Input)
+                stop = safe_query_value(child, "#stop-field", Input)
+                step = safe_query_value(child, "#step-field", Input)
+                rate = safe_query_value(child, "#rate-field", Input)
 
                 # only implemented sweep1D atm, will upgrade to a generic later
-                sweep = Sweep1D(instrument, parameter, float(start), float(stop), float(step))
+                # print(type(instrument))
+                match instrument:
+                    case Keithley2450():
+                        sweep = Sweep1D(instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
+                    case CryomagneticsModel4G():
+                        sweep = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
+
                 self.sweeps_sequence.append(SweepSequenceItem(sweep))
         except Exception as e:
             self.notify(f"Error: {e}")

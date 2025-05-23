@@ -36,12 +36,14 @@ from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
 
-    def __init__(self, instrument: VisaInstrument, parameter: str, start: float, stop: float, step: float) -> None:
+    def __init__(self, instrument: VisaInstrument, parameter: Optional[float | None] = None, start: Optional[float | None] = None, stop: Optional[float | None] = None,
+                 step: Optional[float | None] = None, rate: Optional[float | None] = None) -> None:
         self.instrument = instrument
         self.parameter = parameter 
         self.start_val = start
         self.stop_val = stop 
         self.step_val = step
+        self.rate_val = rate
         self.done_signal = threading.Event
 
     def start(self) -> None:
@@ -348,3 +350,9 @@ class MeasurementInitializerDialog(ModalScreen):
                 classes="container-fill-horizontal"
             )
         )
+
+def safe_query_value(container, selector, widget_type):
+    try:
+        return container.query_one(selector, widget_type).value
+    except Exception:
+        return None  # or some default value
