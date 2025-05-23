@@ -1,13 +1,16 @@
 from typing import Any, Dict
 from qcodes.dataset import Measurement
 from qcodes.instrument import VisaInstrument
+from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Center, Horizontal, Vertical
+from textual.reactive import Reactive
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button
+from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button, Switch
 
 from utils.drivers.Keithley_2450 import Keithley2450
-from utils.util import ActionSequence, Sweep1D
+from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
+from utils.util import ActionSequence, Sweep1D, safe_query_value
 
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.
@@ -27,39 +30,96 @@ class SweepSequenceItem(ListItem):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Horizontal(
-                Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start_val}, stop={self.sweep.stop_val}, step={self.sweep.step_val})")
-            ),
+            Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start_val}, stop={self.sweep.stop_val}, step={self.sweep.step_val})"),
             classes="short-listitem"
         )
 
-class SweepCreatorItem(ListItem):
+class SweepCreatorItem(Collapsible):
     def __init__(self) -> None:
         super().__init__()
         self.instruments = self.app.state.connected_instruments
         self.select_options = [(instr.name, instr) for instr in self.instruments]
+        self.main_horizontal = Horizontal(classes="container") # Contains fields to configure sweep
 
     def compose(self) -> ComposeResult:
-        yield Vertical(
-            Horizontal( 
-                Select(options=self.select_options, classes="inline-select", id="instrument-field"), 
-                Select(options=[("Voltage", 1)], classes="inline-select", id="parameter-field"), 
-                Input(placeholder="Start", type="number", classes="inline", id="start-field"), 
-                Input(placeholder="Stop", type="number", classes="inline", id="stop-field"), 
-                Input(placeholder="Step", type="number", classes="inline", id="step-field"), 
-                classes="sweep-info"
-            ),
-            classes="short-listitem"
-        )
+            yield self.main_horizontal
 
     async def on_screen_resume(self) -> None:
-        """ Handle the ScreenResume event. """
-
-        print("refresh!")
+        """Handle the ScreenResume event."""
         self.instruments: list[VisaInstrument] = self.app.state.connected_instruments
-        self.select_options.clear()
-        self.select_options.set_options([(instr.name, instr) for instr in self.instruments])
+        # Update select options if the select already exists
+        try:
+            instrument_select = self.query_one("#instrument-field", Select)
+            instrument_select.set_options([(instr.name, instr) for instr in self.instruments])
+        except:
+            # Select doesn't exist yet, will be created in initial setup
+            pass
 
+    async def clear_and_setup_widgets(self, widgets_to_add):
+        """Helper method to clear parameter widgets and add new ones."""
+        # Clear all widgets except the instrument select
+        ignored_ids = ["instrument-field", "remove-sequence-item", "move-list-item-up", "move-list-item-down", "instrument-settings"]
+        children_to_remove = []
+        for child in self.main_horizontal.children:
+            if child.id not in ignored_ids:
+                children_to_remove.append(child)
+        
+        for child in children_to_remove:
+            await child.remove()
+        
+        # Add the parameter-specific widgets
+        for widget in widgets_to_add:
+            self.main_horizontal.mount(widget)
+
+    async def set_keithley_widgets(self) -> None:
+        """Set up widgets for Keithley sweep configuration."""
+        keithley_widgets = [
+            Select(options=[("Voltage", "voltage"), ("Current", "current")], 
+                   classes="inline-select", id="parameter-field"),
+            Input(placeholder="Start", type="number", classes="inline", id="start-field"),
+            Input(placeholder="Stop", type="number", classes="inline", id="stop-field"),
+            Input(placeholder="Step", type="number", classes="inline", id="step-field")
+        ]
+        await self.clear_and_setup_widgets(keithley_widgets)
+
+    async def set_cryomagneticsm4g_widgets(self) -> None:
+        """Set up widgets for CryomagneticsM4G sweep configuration."""
+        m4g_widgets = [
+            Input(placeholder="Start", type="number", classes="inline", id="start-field"),
+            Input(placeholder="Stop", type="number", classes="inline", id="stop-field"),
+            Input(placeholder="Rate", type="number", classes="inline", id="rate-field")
+        ]
+        await self.clear_and_setup_widgets(m4g_widgets)
+
+    def setup_initial_widgets(self) -> None:
+        """Set up initial widgets (just the instrument select)."""
+        self.main_horizontal.mount(
+            Vertical(            
+                Button("󰜷", classes="short", id="move-list-item-up"), 
+                Button("-", classes="short", id="remove-list-item"),
+                Button("󰜮", classes="short", id="move-list-item-down"), 
+                classes="container-15",
+                id="instrument-settings"
+            ),
+            Select(options=self.select_options, classes="inline-select", id="instrument-field"),
+        )
+
+    @on(Select.Changed)
+    async def select_changed(self, event: Select.Changed) -> None:
+        """Handle the select changed event."""
+        if event.select.id == "instrument-field":
+            handlers = {
+                Keithley2450: self.set_keithley_widgets,
+                CryomagneticsModel4G: self.set_cryomagneticsm4g_widgets,
+            }
+
+            handler = handlers.get(type(event.value))
+            if handler:
+                await handler()
+
+    async def on_mount(self) -> None:
+        """Set up initial widgets when the component mounts."""
+        self.setup_initial_widgets()
 
 class ElectronicMeasurementsScreen(Screen):
     """UI for making a sequence of actions.
@@ -90,27 +150,28 @@ class ElectronicMeasurementsScreen(Screen):
 
             # Left side info
             Vertical(
-                Static("Sweep Creator", classes="label"),
+                Center(Static("Sweep Creator", classes="centered-subtitle"), classes="centered-widget"),
                 self.sweeps_configurator,
                 Horizontal(
                     Button("Append to Sequence", classes="inline-left", id="append-sweep-to-sequence"),
                     Button("+", classes="inline-right", id="create-list-item"),
                     Button("-", classes="inline-right", id="remove-list-item"),
-                    classes="container-fill-horizontal",
+                    id="sweep-creator-controls" 
                 ),
-                id="sweep-creator" 
+                classes="container-fill-horizontal",
             ),
 
             # Right side information
             Vertical(
-                Vertical(Static("Sweeps", classes="centered-subtitle"), classes="centered-widget"),
-                Horizontal(self.sweeps_sequence, classes="accent-container"),
+                Center(Static("Sequence", classes="centered-subtitle"), classes="centered-widget"),
+                Horizontal(self.sweeps_sequence),
                 Rule(),
                 Horizontal(
                     Button("Start Sequence", id="start-sequence"),
                     Button("-", classes="inline-right", id="remove-sequence-item"),
                     classes="container-fill-horizontal",
                 ),
+                classes="sidebar",
                 id="measurement-sequence",
             ),
         )
@@ -118,12 +179,24 @@ class ElectronicMeasurementsScreen(Screen):
 
     def create_list_item(self) -> None:
         """Add an entry to the sweep configuration column."""
-        self.sweeps_configurator.append(SweepCreatorItem())
+        self.sweeps_configurator.mount(SweepCreatorItem())
 
-    def remove_list_item(self) -> None:
+    def remove_list_item(self, widget: SweepCreatorItem | None) -> None:
         """Remove an entry from the sweep configuration column."""
-        idx = self.sweeps_configurator.index # selected idx
-        self.sweeps_configurator.pop(idx) # remove it
+        if widget:
+            widget.remove()
+
+    def move_list_item_up(self, widget: SweepCreatorItem | None) -> None:
+        """Moves a list item up in the sequence."""
+        if not widget:
+            return 
+        ...
+
+    def move_list_item_down(self, widget: SweepCreatorItem | None) -> None:
+        """Moves a list item up in the sequence."""
+        if not widget:
+            return 
+        ...
 
     def remove_sequence_item(self) -> None:
         """Remove an entry from the sequence column."""
@@ -136,14 +209,21 @@ class ElectronicMeasurementsScreen(Screen):
         try:
             children = self.query_one("#sweep-info", ListView).children
             for (i, child) in enumerate(children):
-                instrument = child.query_one("#instrument-field", Select).value
-                parameter = child.query_one("#parameter-field", Select).value
-                start = child.query_one("#start-field", Input).value
-                stop = child.query_one("#stop-field", Input).value
-                step = child.query_one("#step-field", Input).value
+                instrument = safe_query_value(child, "#instrument-field", Select)
+                parameter = safe_query_value(child, "#parameter-field", Select)
+                start = safe_query_value(child, "#start-field", Input)
+                stop = safe_query_value(child, "#stop-field", Input)
+                step = safe_query_value(child, "#step-field", Input)
+                rate = safe_query_value(child, "#rate-field", Input)
 
                 # only implemented sweep1D atm, will upgrade to a generic later
-                sweep = Sweep1D(instrument, parameter, float(start), float(stop), float(step))
+                # print(type(instrument))
+                match instrument:
+                    case Keithley2450():
+                        sweep = Sweep1D(instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
+                    case CryomagneticsModel4G():
+                        sweep = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
+
                 self.sweeps_sequence.append(SweepSequenceItem(sweep))
         except Exception as e:
             self.notify(f"Error: {e}")
@@ -164,11 +244,20 @@ class ElectronicMeasurementsScreen(Screen):
         handlers = {
             "create-list-item": self.create_list_item,
             "remove-list-item": self.remove_list_item,
+            "move-list-item-up" : self.move_list_item_up,
+            "move-list-item-down" : self.move_list_item_down,
             "append-sweep-to-sequence": self.append_sweep_to_sequence,
             "remove-sequence-item": self.remove_sequence_item,
             "start-sequence": self.start_sequence,
         }
 
+        widget: SweepCreatorItem | None = next(
+            (elm for elm in event.button.ancestors if isinstance(elm, SweepCreatorItem)), 
+            None
+        )
         handler = handlers.get(str(event.button.id))
         if handler:
-            handler()
+            try:
+                handler(widget)
+            except:
+                handler()

@@ -31,21 +31,26 @@ import webbrowser
 import datetime
 from typing import List
 
+from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
+
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
 
-    def __init__(self, instrument: VisaInstrument, parameter: str, start: float, stop: float, step: float) -> None:
+    def __init__(self, instrument: VisaInstrument, parameter: Optional[float | None] = None, start: Optional[float | None] = None, stop: Optional[float | None] = None,
+                 step: Optional[float | None] = None, rate: Optional[float | None] = None) -> None:
         self.instrument = instrument
         self.parameter = parameter 
         self.start_val = start
         self.stop_val = stop 
         self.step_val = step
+        self.rate_val = rate
         self.done_signal = threading.Event
 
     def start(self) -> None:
         """Handler for a sweep based on the class construction."""
         handlers = {
-            Keithley2450: self.start_keithley_sweep,
+            Keithley2450: self.start_keithley2450_sweep,
+            CryomagneticsModel4G: self.start_cryomagneticsm4g_sweep,
         }
 
         handler = handlers.get(type(self.instrument)) # type: ignore
@@ -58,16 +63,25 @@ class Sweep1D:
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
         ...
 
-    def start_keithley_sweep(self) -> None:
-        """Implementation of Keithley 2450 hardware-driven sweep."""
+    def start_cryomagneticsm4g_sweep(self) -> None:
+        """Dispatch for the Cryomagnetics Model 4G sweep.
+
+        The model 4G effectively exposes 2 parameters: ramp rate and setpoint.
+        Sweeps are accomplished by setting the first end of the sweep, ramping there, then repeating
+        for the tail end of the sweep.
+        """
+        self.instrument.reset()
+        self.instrument.operating_mode(True) # remote mode
+
+    def start_keithley2450_sweep(self) -> None:
+        """Dispatch for the Keithley 2450 hardware-driven sweep."""
 
         print("sweeping keithley!")
 
         # initialise_database()
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
-        self.instrument.reset()
-        self.instrument.get_idn()
         self.instrument.output_enabled.set_to(True)
+        self.instrument.reset()
 
         self.instrument.terminals("front")
         self.instrument.source.function("current")
@@ -289,11 +303,15 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     - Prompt for name
     """
 
+    print(name)
+
     # If we need to test without access to the lab hardware, just create a dummy instrument
     if name == "simulated_lakeshore":
         return LakeshoreModel336("simulated_lakeshore336", address="GPIB::2::INSTR", pyvisa_sim_file="lakeshore_model336.yaml")
     elif name == "simulated_keithley":
         return Keithley2450("simulated_keithley2450", address="GPIB::2::INSTR", pyvisa_sim_file="Keithley_2450.yaml")
+    elif name == "simulated_cryomagnetics4g":
+        return CryomagneticsModel4G("simulated_cryomagnetics4g", address="GPIB::1::INSTR", pyvisa_sim_file="cryo4g.yaml", max_current_limits={0: (0.0, 0.0)}, coil_constant=10.0,)
 
     rm = pyvisa.ResourceManager()
     inst = rm.open_resource(address)
@@ -332,3 +350,9 @@ class MeasurementInitializerDialog(ModalScreen):
                 classes="container-fill-horizontal"
             )
         )
+
+def safe_query_value(container, selector, widget_type):
+    try:
+        return container.query_one(selector, widget_type).value
+    except Exception:
+        return None  # or some default value

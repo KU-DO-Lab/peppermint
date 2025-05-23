@@ -42,6 +42,20 @@ Select {
   }
 }
 
+.short {
+    /* border: none; */
+    width: 1;
+    /* width: 5%; */
+    /* height: 3; */
+    /* margin: 0 -3; */
+}
+
+.sidebar {
+    width: 40%;
+    dock: right;
+    background: $panel;
+}
+
 .container {
     height: auto;
     width: auto;
@@ -68,11 +82,8 @@ Select {
 }
 
 .container-15 {
-    width: auto;
+    width: 15%;
     height: auto;
-    max-width: 15%;
-    min-width: 15%;
-    background: $accent;
 }
 
 .accent-container {
@@ -116,9 +127,24 @@ Select {
     align-horizontal: left;
 }
 
+.inline-select {
+    max-width: 30%;
+    min-width: 20;
+}
+
+#sweep-creator-controls {
+    padding: 1 0;
+}
+
+.inline {
+    width: 1fr;
+    min-width: 15;
+}
+
 .short-listitem {
-    height: 4;
-    width: auto;
+    height: auto;
+    min-height: 3;
+    max-height: 6;
 }
 
 .field {
