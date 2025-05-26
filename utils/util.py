@@ -1,3 +1,5 @@
+import re
+import sqlite3
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
@@ -32,6 +34,71 @@ import datetime
 from typing import List
 
 from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
+
+class DataSaver:
+    def __init__(self, database_path: str) -> None:
+        try:
+            self.conn = sqlite3.connect(database_path) # Persistent connection
+            self.cursor = self.conn.cursor()
+        except sqlite3.OperationalError as e:
+            print(f"Failed to open database {e}")
+
+    def get_tables(self) -> List[str]:
+        """Grab all of the tables in the opened db.
+
+        Useful for auto-creating a new table to work on.
+        """
+
+        query = f"""
+        SELECT 
+            name
+        FROM 
+            sqlite_schema
+        WHERE 
+            type ='table' AND 
+            name NOT LIKE 'sqlite_%';
+        """
+
+        res = self.conn.execute(query)
+        tables = [row[0] for row in res.fetchall()]
+
+        return tables
+
+    def register_table(self, name) -> None:
+        """Create a table/experiment in the database. If table exists, registers with name_# for duplicates."""
+
+        tables = self.get_tables()
+        pattern = re.compile(rf"^{re.escape(name)}(?:_(\d+))?$")
+        indices = []
+
+        for table_name in tables:
+            match = pattern.match(table_name)
+            if match:
+                # If there is an index, parse it, else treat it as index 0
+                index = int(match.group(1)) if match.group(1) else 0
+                indices.append(index)
+
+        next_index = max(indices) + 1 if indices else 0
+
+        if next_index == 0:
+            new_table_name = name
+        else:
+            new_table_name = f"{name}_{next_index}"
+
+        create_table = f"""
+        CREATE TABLE IF NOT EXISTS "{new_table_name}" (
+            id INTEGER PRIMARY KEY
+        );
+        """
+
+        self.conn.execute(create_table)
+        self.conn.commit()
+
+    def register_parameter(self, parameter) -> None:
+        new_column = """ALTER TABLE table_name ADD COLUMN column_name column_type;"""
+
+    def add_result(self, param_value_pair: tuple[str, float]) -> None:
+        pass
 
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
@@ -76,7 +143,7 @@ class Sweep1D:
     def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep."""
 
-        print("sweeping keithley!")
+        # print("sweeping keithley!")
 
         # initialise_database()
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
@@ -92,7 +159,7 @@ class Sweep1D:
         with self.instrument.output_enabled.set_to(True):
             voltage = self.instrument.sense.voltage()
 
-        print("Approx. resistance: ", voltage / current_setpoint)
+        # print("Approx. resistance: ", voltage / current_setpoint)
 
 
         # self.instrument.sense.function("voltage")
@@ -145,11 +212,11 @@ class ActionSequence:
             ... # will have to work out how to notify properly here
         else:
             for (i, fn) in enumerate(self.sequence):
-                print(f"sweeping {i}")
+                # print(f"sweeping {i}")
                 future = self.executor.submit(fn.start)
                 result = future.result()  # Blocks until the function is done
                 self.idx = i
-                print(f"Signal: {result}")
+                # print(f"Signal: {result}")
 
     def stop(self) -> None:
         """Totally stops the sequence. Requires status to be paused to prevent accidental stops."""
@@ -303,7 +370,7 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     - Prompt for name
     """
 
-    print(name)
+    # print(name)
 
     # If we need to test without access to the lab hardware, just create a dummy instrument
     if name == "simulated_lakeshore":
