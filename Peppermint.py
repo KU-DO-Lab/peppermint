@@ -1,4 +1,4 @@
-import os
+import atexit
 import pyvisa
 import argparse
 
@@ -99,3 +99,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     Peppermint(simulated_mode=args.simulated_instruments).run()
+
+@atexit.register 
+def exit_handler() -> None: 
+    ...
