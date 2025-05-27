@@ -5,7 +5,6 @@ from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from utils.util import *
 
 import numpy as np
-from qcodes.dataset import Measurement, initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import GroupParameter, MultiParameter, ParameterBase
 
 from textual.screen import Screen
@@ -51,10 +50,7 @@ class TemperatureScreen(Screen):
 
         # Set up data logging
         date = datetime.datetime.now().strftime('%d.%b.%Y')
-        self.app.state.datasaver.register_table(date)
-        # self.datasaver2 = DataSaver("datasaver2_testing.db")
-        # date = datetime.datetime.now().strftime('%d.%b.%Y')
-        # self.datasaver2.register_table(date)
+        self.table_name = self.app.state.datasaver.register_table(f"Temperature Monitor: {date}") # Resolves duplicates, so there may be a numeric tag at the end of the name and we assign this way.
 
         self.stats_buffer: Dict[str, Dict[str, Any]] = {} # we might want to run continuous statistics over a range of data.
         
@@ -207,26 +203,6 @@ class TemperatureScreen(Screen):
 
         yield Footer()
 
-    def initialize_measurements(self) -> None:
-        """Initialize a unified measurement for all temperature parameters"""
-
-        initialise_or_create_database_at("experiments.db")
-        self.experiment = load_or_create_experiment(
-            experiment_name="Lakeshore Temperature Monitoring",
-            sample_name="Sample 123"
-        )
-        self.measurement = Measurement(exp=self.experiment)
-
-        # First: register all temperature parameters
-        for param in self.app.state.read_parameters:
-            if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
-                # print(param)
-                # self.datasaver2.register_parameter(param)
-                self.measurement.register_parameter(param)
-
-        # Then: start the measurement (run)
-        self.datasaver = self.measurement.run().__enter__()
-            
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
         temperatures: Dict[str, float] = self.get_temperatures(self.fetch_gettable_channels_and_parameters)
@@ -313,18 +289,13 @@ class TemperatureScreen(Screen):
         if not hasattr(self, 'multi_temp_param'):
             self.multi_temp_param = TemperatureMultiParameter('multi_temp', channel_names, params)
 
-        # Initialize datasaver if not done
-        if not self.datasaver:
-            self.initialize_measurements()
-
         # Get values from all parameters
         values = self.multi_temp_param.get_raw()
         current_time = time.time()
 
         # Build result tuples: (individual_param, value)
         result_tuples = [(param, value) for param, value in zip(params, values)]
-        # print(result_tuples)
-        self.datasaver.add_result(*result_tuples)
+        self.app.state.datasaver.add_result(self.table_name, result_tuples)
 
         data = {}
 
@@ -390,7 +361,7 @@ class TemperatureScreen(Screen):
         self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
 
         if len(self.allowed_temperature_monitors) <= 0: 
-            self.notify("please connect the Lakeshore 336!")
+            self.notify("Please connect the Lakeshore 336!")
             return
 
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
@@ -408,7 +379,6 @@ class TemperatureScreen(Screen):
             self.app.state.read_parameters.append(param)
         
         self.active_channel = self.allowed_temperature_monitors[0].output_1 # set channel "A" active at the start
-        # self.initialize_measurements()
         self.populate_fields() # fields like PID, setpoint, heater mode need to be aquired and updated.
         self.start_temperature_polling()
 

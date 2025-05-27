@@ -14,6 +14,7 @@ from queue import Queue
 import threading
 from collections import deque
 
+from qcodes.parameters import Parameter
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -64,7 +65,7 @@ class DataSaver:
 
         return tables
 
-    def register_table(self, name) -> None:
+    def register_table(self, name) -> str:
         """Create a table/experiment in the database. If table exists, registers with name_# for duplicates."""
 
         tables = self.get_tables()
@@ -94,11 +95,67 @@ class DataSaver:
         self.conn.execute(create_table)
         self.conn.commit()
 
-    def register_parameter(self, parameter) -> None:
-        new_column = """ALTER TABLE table_name ADD COLUMN column_name column_type;"""
+        return new_table_name
 
-    def add_result(self, param_value_pair: tuple[str, float]) -> None:
-        pass
+    def _column_exists(self, table_name: str, column_name: str) -> bool:
+        """Check if a column exists in the specified table."""
+
+        try:
+            cursor = self.conn.execute(f'PRAGMA table_info("{table_name}");')
+            columns = [row[1] for row in cursor.fetchall()]  # row[1] is the column name
+            return column_name in columns
+        except sqlite3.Error:
+            return False
+
+    def ensure_column_exists(self, table_name: str, column_name: str, column_type: str = "NUMERIC") -> None:
+        """Ensure a column exists in the table, create it if it doesn't."""
+
+        if not self._column_exists(table_name, column_name):
+            try:
+                query = f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {column_type};'
+                self.conn.execute(query)
+                self.conn.commit()
+                print(f"Added column '{column_name}' to table '{table_name}'")
+            except sqlite3.Error as e:
+                print(f"Error adding column '{column_name}': {e}")
+                raise
+
+    def ensure_table_exists(self, table_name: str) -> None:
+        """Ensure the table exists with proper param/value structure."""
+
+        query = f"""
+        CREATE TABLE IF NOT EXISTS "{table_name}" (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            param TEXT NOT NULL,
+            value NUMERIC NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        self.conn.execute(query)
+        self.conn.commit()
+
+    def add_result(self, table_name: str, param_value_pair: list[tuple[Parameter, float]]) -> None:
+        """Add a set of values to a table. Automatically creates columns for the parameters if they do not exist."""
+
+        if not param_value_pair:
+            return
+        
+        self.ensure_table_exists(table_name)
+        
+        # Ensure all columns exist
+        for parameter, _ in param_value_pair:
+            self.ensure_column_exists(table_name, f"{parameter.full_name}", "NUMERIC")
+        
+        # Insert all values in one row
+        column_names = [f'"{param.full_name}"' for param, _ in param_value_pair]  # Fixed: use underscore
+        values = [value for _, value in param_value_pair]
+        
+        columns_str = ", ".join(column_names)
+        placeholders = ", ".join(["?" for _ in values]) # Use placeholders to let SQLite insert the values below
+        
+        query = f'INSERT INTO "{table_name}" ({columns_str}) VALUES ({placeholders});'
+        self.cursor.execute(query, values) # Pass the query and values now
+        self.conn.commit()
 
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
