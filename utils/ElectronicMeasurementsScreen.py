@@ -135,8 +135,6 @@ class ElectronicMeasurementsScreen(Screen):
 
     def __init__(self) -> None:
         super().__init__()
-        allowed_SMUs = [Keithley2450]
-        connected_SMUs = []
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
         self.datasavers: Dict[str, Any] = {}
@@ -167,7 +165,8 @@ class ElectronicMeasurementsScreen(Screen):
                 Horizontal(self.sweeps_sequence),
                 Rule(),
                 Horizontal(
-                    Button("Start Sequence", id="start-sequence"),
+                    Button("Save!"),
+                    Button("Start Sequence", disabled=True, id="start-sequence"),
                     Button("-", classes="inline-right", id="remove-sequence-item"),
                     classes="container-fill-horizontal",
                 ),

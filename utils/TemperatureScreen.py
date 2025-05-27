@@ -46,8 +46,6 @@ class TemperatureScreen(Screen):
         self.is_dragging = False
         self.is_sweeping = False
  
-        self.datasaver = None
-
         # Set up data logging
         date = datetime.datetime.now().strftime('%d.%b.%Y')
         self.table_name = self.app.state.datasaver.register_table(f"Temperature Monitor: {date}") # Resolves duplicates, so there may be a numeric tag at the end of the name and we assign this way.
@@ -85,6 +83,10 @@ class TemperatureScreen(Screen):
             use_timestamps=True,
         )
 
+        self.plotter2 = LivePlotter(
+            self.app.state.datasaver,
+            self.table_name
+        )
             
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""

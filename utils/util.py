@@ -1,3 +1,4 @@
+import os
 import re
 import sqlite3
 from bokeh.plotting import figure
@@ -35,11 +36,16 @@ import datetime
 from typing import List
 
 from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
+import logging
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler, LoggingEventHandler
 
 class DataSaver:
-    def __init__(self, database_path: str) -> None:
+    def __init__(self, path: str) -> None:
+
+        self.path = path
         try:
-            self.conn = sqlite3.connect(database_path) # Persistent connection
+            self.conn = sqlite3.connect(path) # Persistent connection
             self.cursor = self.conn.cursor()
         except sqlite3.OperationalError as e:
             print(f"Failed to open database {e}")
@@ -181,12 +187,6 @@ class Sweep1D:
         if handler:
             handler()
 
-    def connect_to_database(self) -> None:
-        """Append an entry to the tracked parameters and ensure it appears in the database/experiment."""
-        # initialise_database()
-        # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
-        ...
-
     def start_cryomagneticsm4g_sweep(self) -> None:
         """Dispatch for the Cryomagnetics Model 4G sweep.
 
@@ -288,6 +288,73 @@ class ActionSequence:
             return ("idle", -1)
         else:
             return ("running", self.idx)
+
+class DatabaseChangeHandler(FileSystemEventHandler):
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.last_modified = os.path.getmtime(db_path)
+    
+    def on_modified(self, event):
+        if event.src_path == self.db_path:
+            current_time = os.path.getmtime(self.db_path)
+            if current_time > self.last_modified:
+                self.last_modified = current_time
+                self.handle_database_change()
+    
+    def handle_database_change(self):
+        print("Database changed!")
+        # Your Python code here
+        # Check what changed, process data, etc.
+
+class LivePlotter: 
+    """Real-time data plotter implementing multiple display modes.
+
+    Peppermint uses SQLite to log data, which for each given measurement (collections of related values) 
+    is packaged nicely in a table. Each plotter mounts an observer to the table it is assigned to watch,
+    and when new entries appear this is reflected in the plot by streaming a ColumnDataSource.
+
+    This dramatically reduces plotting overhead since only new points are sent to the canvas and I/O 
+    is done one row at a time with SQL which costs no more than a few miliseconds.
+
+    Note: this does not check the TABLE, just the file (potential bottleneck). This may be possible with 
+    triggers but I (Grant) am far from an expert using SQL. Presently, we don't need to collect data crazy 
+    fast but we can look into this if it becomes an issue.
+
+    Available frontends for display are:
+    (1) Bokeh: opens an interactive plot in a web browser, ideal for quality. The plotting library 
+        is designed with data streaming in mind.
+    (2) Textual (WIP): ASCII display for fun and a quick glance
+    """
+
+    def __init__(self, database: DataSaver, table_name: str, max_points: int = 2**18, xlabel: str = "x-axis", ylabel: str = "y-axis", title = "Title") -> None:
+        self.data_queue = Queue()
+        self.database = database
+        self.title = title 
+        self.xlabel = xlabel
+        self.ylabel = ylabel
+        self.max_points = max_points
+        self.table_name = table_name
+
+        self.observer = Observer()
+        self.observer.schedule(event_handler=DatabaseChangeHandler(self.database.path), path=os.path.dirname(self.database.path))
+        self.observer.start()
+
+    # def _update_plot(self) -> None:
+    #     """Update the plot with new data."""
+
+
+        # while not self.data_queue.empty():
+        #     channel, x, y = self.data_queue.get()
+        #     if self.use_timestamps:
+        #         # Convert x to a timestamp if use_timestamps is enabled
+        #         x = datetime.datetime.fromtimestamp(x)
+        #     self.plot_data[channel]["x"].append(x)
+        #     self.plot_data[channel]["y"].append(y)
+        #     self.sources[channel].data = {
+        #         'x': list(self.plot_data[channel]["x"]),
+        #         'y': list(self.plot_data[channel]["y"])
+        #     }
+
 
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
