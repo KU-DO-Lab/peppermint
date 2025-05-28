@@ -1,3 +1,6 @@
+import os
+import re
+import sqlite3
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
@@ -12,6 +15,7 @@ from queue import Queue
 import threading
 from collections import deque
 
+from qcodes.parameters import Parameter
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -32,6 +36,132 @@ import datetime
 from typing import List
 
 from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
+import logging
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler, LoggingEventHandler
+
+class DataSaver:
+    def __init__(self, path: str) -> None:
+
+        self.path = path
+        try:
+            self.conn = sqlite3.connect(path) # Persistent connection
+            self.cursor = self.conn.cursor()
+        except sqlite3.OperationalError as e:
+            print(f"Failed to open database {e}")
+
+    def get_tables(self) -> List[str]:
+        """Grab all of the tables in the opened db.
+
+        Useful for auto-creating a new table to work on.
+        """
+
+        query = f"""
+        SELECT 
+            name
+        FROM 
+            sqlite_schema
+        WHERE 
+            type ='table' AND 
+            name NOT LIKE 'sqlite_%';
+        """
+
+        res = self.conn.execute(query)
+        tables = [row[0] for row in res.fetchall()]
+
+        return tables
+
+    def register_table(self, name) -> str:
+        """Create a table/experiment in the database. If table exists, registers with name_# for duplicates."""
+
+        tables = self.get_tables()
+        pattern = re.compile(rf"^{re.escape(name)}(?:_(\d+))?$")
+        indices = []
+
+        for table_name in tables:
+            match = pattern.match(table_name)
+            if match:
+                # If there is an index, parse it, else treat it as index 0
+                index = int(match.group(1)) if match.group(1) else 0
+                indices.append(index)
+
+        next_index = max(indices) + 1 if indices else 0
+
+        if next_index == 0:
+            new_table_name = name
+        else:
+            new_table_name = f"{name}_{next_index}"
+
+        create_table = f"""
+        CREATE TABLE IF NOT EXISTS "{new_table_name}" (
+            id INTEGER PRIMARY KEY
+        );
+        """
+
+        self.conn.execute(create_table)
+        self.conn.commit()
+
+        return new_table_name
+
+    def _column_exists(self, table_name: str, column_name: str) -> bool:
+        """Check if a column exists in the specified table."""
+
+        try:
+            cursor = self.conn.execute(f'PRAGMA table_info("{table_name}");')
+            columns = [row[1] for row in cursor.fetchall()]  # row[1] is the column name
+            return column_name in columns
+        except sqlite3.Error:
+            return False
+
+    def ensure_column_exists(self, table_name: str, column_name: str, column_type: str = "NUMERIC") -> None:
+        """Ensure a column exists in the table, create it if it doesn't."""
+
+        if not self._column_exists(table_name, column_name):
+            try:
+                query = f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {column_type};'
+                self.conn.execute(query)
+                self.conn.commit()
+                print(f"Added column '{column_name}' to table '{table_name}'")
+            except sqlite3.Error as e:
+                print(f"Error adding column '{column_name}': {e}")
+                raise
+
+    def ensure_table_exists(self, table_name: str) -> None:
+        """Ensure the table exists with proper param/value structure."""
+
+        query = f"""
+        CREATE TABLE IF NOT EXISTS "{table_name}" (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            param TEXT NOT NULL,
+            value NUMERIC NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        self.conn.execute(query)
+        self.conn.commit()
+
+    def add_result(self, table_name: str, param_value_pair: list[tuple[Parameter, float]]) -> None:
+        """Add a set of values to a table. Automatically creates columns for the parameters if they do not exist."""
+
+        if not param_value_pair:
+            return
+        
+        self.ensure_table_exists(table_name)
+        
+        # Ensure all columns exist
+        for parameter, _ in param_value_pair:
+            self.ensure_column_exists(table_name, f"{parameter.full_name}", "NUMERIC")
+        
+        # Insert all values in one row
+        column_names = [f'"{param.full_name}"' for param, _ in param_value_pair]  # Fixed: use underscore
+        values = [value for _, value in param_value_pair]
+        
+        columns_str = ", ".join(column_names)
+        placeholders = ", ".join(["?" for _ in values]) # Use placeholders to let SQLite insert the values below
+        
+        query = f'INSERT INTO "{table_name}" ({columns_str}) VALUES ({placeholders});'
+        self.cursor.execute(query, values) # Pass the query and values now
+        self.conn.commit()
 
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
@@ -57,12 +187,6 @@ class Sweep1D:
         if handler:
             handler()
 
-    def connect_to_database(self) -> None:
-        """Append an entry to the tracked parameters and ensure it appears in the database/experiment."""
-        # initialise_database()
-        # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
-        ...
-
     def start_cryomagneticsm4g_sweep(self) -> None:
         """Dispatch for the Cryomagnetics Model 4G sweep.
 
@@ -76,7 +200,7 @@ class Sweep1D:
     def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep."""
 
-        print("sweeping keithley!")
+        # print("sweeping keithley!")
 
         # initialise_database()
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
@@ -92,7 +216,7 @@ class Sweep1D:
         with self.instrument.output_enabled.set_to(True):
             voltage = self.instrument.sense.voltage()
 
-        print("Approx. resistance: ", voltage / current_setpoint)
+        # print("Approx. resistance: ", voltage / current_setpoint)
 
 
         # self.instrument.sense.function("voltage")
@@ -145,11 +269,11 @@ class ActionSequence:
             ... # will have to work out how to notify properly here
         else:
             for (i, fn) in enumerate(self.sequence):
-                print(f"sweeping {i}")
+                # print(f"sweeping {i}")
                 future = self.executor.submit(fn.start)
                 result = future.result()  # Blocks until the function is done
                 self.idx = i
-                print(f"Signal: {result}")
+                # print(f"Signal: {result}")
 
     def stop(self) -> None:
         """Totally stops the sequence. Requires status to be paused to prevent accidental stops."""
@@ -164,6 +288,73 @@ class ActionSequence:
             return ("idle", -1)
         else:
             return ("running", self.idx)
+
+class DatabaseChangeHandler(FileSystemEventHandler):
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.last_modified = os.path.getmtime(db_path)
+    
+    def on_modified(self, event):
+        if event.src_path == self.db_path:
+            current_time = os.path.getmtime(self.db_path)
+            if current_time > self.last_modified:
+                self.last_modified = current_time
+                self.handle_database_change()
+    
+    def handle_database_change(self):
+        print("Database changed!")
+        # Your Python code here
+        # Check what changed, process data, etc.
+
+class LivePlotter: 
+    """Real-time data plotter implementing multiple display modes.
+
+    Peppermint uses SQLite to log data, which for each given measurement (collections of related values) 
+    is packaged nicely in a table. Each plotter mounts an observer to the table it is assigned to watch,
+    and when new entries appear this is reflected in the plot by streaming a ColumnDataSource.
+
+    This dramatically reduces plotting overhead since only new points are sent to the canvas and I/O 
+    is done one row at a time with SQL which costs no more than a few miliseconds.
+
+    Note: this does not check the TABLE, just the file (potential bottleneck). This may be possible with 
+    triggers but I (Grant) am far from an expert using SQL. Presently, we don't need to collect data crazy 
+    fast but we can look into this if it becomes an issue.
+
+    Available frontends for display are:
+    (1) Bokeh: opens an interactive plot in a web browser, ideal for quality. The plotting library 
+        is designed with data streaming in mind.
+    (2) Textual (WIP): ASCII display for fun and a quick glance
+    """
+
+    def __init__(self, database: DataSaver, table_name: str, max_points: int = 2**18, xlabel: str = "x-axis", ylabel: str = "y-axis", title = "Title") -> None:
+        self.data_queue = Queue()
+        self.database = database
+        self.title = title 
+        self.xlabel = xlabel
+        self.ylabel = ylabel
+        self.max_points = max_points
+        self.table_name = table_name
+
+        self.observer = Observer()
+        self.observer.schedule(event_handler=DatabaseChangeHandler(self.database.path), path=os.path.dirname(self.database.path))
+        self.observer.start()
+
+    # def _update_plot(self) -> None:
+    #     """Update the plot with new data."""
+
+
+        # while not self.data_queue.empty():
+        #     channel, x, y = self.data_queue.get()
+        #     if self.use_timestamps:
+        #         # Convert x to a timestamp if use_timestamps is enabled
+        #         x = datetime.datetime.fromtimestamp(x)
+        #     self.plot_data[channel]["x"].append(x)
+        #     self.plot_data[channel]["y"].append(y)
+        #     self.sources[channel].data = {
+        #         'x': list(self.plot_data[channel]["x"]),
+        #         'y': list(self.plot_data[channel]["y"])
+        #     }
+
 
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
@@ -303,7 +494,7 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     - Prompt for name
     """
 
-    print(name)
+    # print(name)
 
     # If we need to test without access to the lab hardware, just create a dummy instrument
     if name == "simulated_lakeshore":

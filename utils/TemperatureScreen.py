@@ -5,7 +5,6 @@ from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from utils.util import *
 
 import numpy as np
-from qcodes.dataset import Measurement, initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import GroupParameter, MultiParameter, ParameterBase
 
 from textual.screen import Screen
@@ -47,10 +46,10 @@ class TemperatureScreen(Screen):
         self.is_dragging = False
         self.is_sweeping = False
  
-        # self.experiments = {}
-        # self.measurements: Dict[str, Measurement] = {}
-        # self.datasaver: Dict[str, Any] = {}
-        self.datasaver = None
+        # Set up data logging
+        date = datetime.datetime.now().strftime('%d.%b.%Y')
+        self.table_name = self.app.state.datasaver.register_table(f"Temperature Monitor: {date}") # Resolves duplicates, so there may be a numeric tag at the end of the name and we assign this way.
+
         self.stats_buffer: Dict[str, Dict[str, Any]] = {} # we might want to run continuous statistics over a range of data.
         
         self.chA_temperature_widget = Static("N/A", id="channel_A", classes="inline-label")
@@ -84,6 +83,10 @@ class TemperatureScreen(Screen):
             use_timestamps=True,
         )
 
+        self.plotter2 = LivePlotter(
+            self.app.state.datasaver,
+            self.table_name
+        )
             
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
@@ -202,39 +205,6 @@ class TemperatureScreen(Screen):
 
         yield Footer()
 
-    def initialize_measurements(self) -> None:
-        """Initialize a unified measurement for all temperature parameters"""
-        initialise_or_create_database_at("experiments.db")
-        self.experiment = load_or_create_experiment(
-            experiment_name="Lakeshore Temperature Monitoring",
-            sample_name="Sample 123"
-        )
-        self.measurement = Measurement(exp=self.experiment)
-
-        # First: register all temperature parameters
-        for param in self.app.state.read_parameters:
-            if hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature":
-                self.measurement.register_parameter(param)
-
-        # Then: start the measurement (run)
-        self.datasaver = self.measurement.run().__enter__()
-
-
-        # for param in self.app.state.read_parameters:
-        #     if not (hasattr(param, 'name_parts') and param.name_parts[-1] == "temperature"):
-        #         continue
-        #
-        #     channel = param.name_parts[1]  # Extract channel label (A, B, C, D)
-        #
-        #     # Create new measurement for this channel
-        #     measurement = Measurement(self.experiments[channel])
-        #     measurement.register_parameter(param)
-        #
-        #     # Store measurement and create a new run (datasaver)
-        #     # each channel has its own datasaver, I could not get it to operate well pushing everything to one.
-        #     self.measurements[channel] = measurement
-        #     self.datasavers[channel] = measurement.run().__enter__()
-            
     def poll_temperature_controller(self) -> None:
         self.get_output_percentage()
         temperatures: Dict[str, float] = self.get_temperatures(self.fetch_gettable_channels_and_parameters)
@@ -252,11 +222,11 @@ class TemperatureScreen(Screen):
             stop: float = float(self.query_one("#setpoint-dragging-stop-field", Input).value)
             setp = self.guess_next_setpoint_for_dragging(threshold=threshold, stop=stop, target_gradient=target_gradient, p=p, i=i, d=d)
 
-            print(f"Mean: {self.stats_buffer["A"]["mean"]}")
-            print(f"Gradient: {self.stats_buffer["A"]["gradient"]}")
-            print(f"Acceleration: {self.stats_buffer["A"]["acceleration"]}")
-            print(f"Instantaneous Output Variation: {self.stats_buffer["A"]["output_variation"]}")
-            print(f"Setpoint: {setp}")
+            # print(f"Mean: {self.stats_buffer["A"]["mean"]}")
+            # print(f"Gradient: {self.stats_buffer["A"]["gradient"]}")
+            # print(f"Acceleration: {self.stats_buffer["A"]["acceleration"]}")
+            # print(f"Instantaneous Output Variation: {self.stats_buffer["A"]["output_variation"]}")
+            # print(f"Setpoint: {setp}")
 
             self.go_to_setpoint(setp)
         
@@ -294,13 +264,13 @@ class TemperatureScreen(Screen):
 
     def sweep_temperature(self, setpoints: Optional[list[float]] = [], actions: Optional[list[Any]] = []) -> None:
         """Start/Stop functionality for temperature sweeps."""
-        print(f"starting sweep")
+        # print(f"starting sweep")
         try: 
             setpoint_input = str(self.query_one("#sweep-setpoints-field", TextArea).text).split(",")
             setpoints = list(map(float, setpoint_input))
             actions = str(self.query_one("#sweep-actions-field", TextArea).text).split(",")
 
-            print(setpoints)
+            # print(setpoints)
             [eval(f"lambda: {expr}") for expr in actions]
 
         except Exception as e:
@@ -321,18 +291,13 @@ class TemperatureScreen(Screen):
         if not hasattr(self, 'multi_temp_param'):
             self.multi_temp_param = TemperatureMultiParameter('multi_temp', channel_names, params)
 
-        # Initialize datasaver if not done
-        if not self.datasaver:
-            self.initialize_measurements()
-
         # Get values from all parameters
         values = self.multi_temp_param.get_raw()
         current_time = time.time()
 
         # Build result tuples: (individual_param, value)
         result_tuples = [(param, value) for param, value in zip(params, values)]
-        print(result_tuples)
-        self.datasaver.add_result(*result_tuples)  # ✅ Correct tuple-based logging
+        self.app.state.datasaver.add_result(self.table_name, result_tuples)
 
         data = {}
 
@@ -373,54 +338,9 @@ class TemperatureScreen(Screen):
 
         return data
 
-
-    # def get_temperatures(self, fetch_channels_function) -> Dict[str, float]:
-    #     """Get and record temperatures for each channel."""
-    #
-    #     data: Dict[str, float] = {}
-    #     things_to_get: Dict[str, ParameterBase] = fetch_channels_function()
-    #
-    #     for channel_name, param in things_to_get.items():
-    #         # Update widget
-    #         if channel_name in self.channel_widgets:
-    #             value = param.get()
-    #             self.channel_widgets[channel_name].update(str(value))
-    #
-    #             # Data to be returned
-    #             data[channel_name] = value
-    #
-    #             # Record data for this channel
-    #             # Saved to the QCoDeS run which gets started when this screen is initialized.
-    #             # if channel_name in self.datasavers and self.datasavers[channel_name]:
-    #             if not self.datasaver:
-    #                 self.initialize_measurements()
-    #
-    #             self.datasaver.add_result( (param, value) )
-    #
-    #             # Update the plot
-    #             if self.plotter:
-    #                 current_time = time.time()
-    #                 self.plotter.update(channel_name, x=current_time, y=value)
-    #
-    #             # Update statistics
-    #             if channel_name not in self.stats_buffer:
-    #                 self.stats_buffer[channel_name] = {"raw_data": deque([], maxlen=128), "mean": float("nan"), "std": float("nan"), "gradient": float("nan"), "acceleration": float("nan"), "sum": 0.0, "output_percent": deque([], maxlen=2), "output_variation": 0.0}
-    #
-    #             self.stats_buffer[channel_name]["raw_data"].append(value)
-    #             self.get_statistics(channel_name)
-    #             self.stats_buffer[channel_name].update(self.get_statistics(channel_name))
-    #
-    #             # update the widgets on screen
-    #             self.query_one("#stats-mean", Static).update(str(self.stats_buffer[channel_name]["mean"]))
-    #             self.query_one("#stats-std", Static).update(str(self.stats_buffer[channel_name]["std"]))
-    #             self.query_one("#stats-gradient", Static).update(str(self.stats_buffer[channel_name]["gradient"]))
-    #             self.query_one("#stats-acceleration", Static).update(str(self.stats_buffer[channel_name]["acceleration"]))
-    #             self.query_one("#stats-output-variation", Static).update(str(self.stats_buffer[channel_name]["output_variation"]))
-    #
-    #     return data
-
     def get_statistics(self, channel: str) -> Dict[str, Any]:
         """Some very basic statistics running on some buffer of points from the temperature controller. It's worth noting this is limited by the resolution of collected data."""
+
 
         buf = self.stats_buffer[channel]
         previous_gradient: np.float32 = buf["gradient"]
@@ -443,7 +363,7 @@ class TemperatureScreen(Screen):
         self.allowed_temperature_monitors = [inst for inst in self.app.state.connected_instruments if isinstance(inst, self.allowed_monitor_types)]
 
         if len(self.allowed_temperature_monitors) <= 0: 
-            self.notify("please connect the Lakeshore 336!")
+            self.notify("Please connect the Lakeshore 336!")
             return
 
         # this spits out a list of parameters, which have their name split as: "instrument, submodule, parameter"
@@ -461,7 +381,6 @@ class TemperatureScreen(Screen):
             self.app.state.read_parameters.append(param)
         
         self.active_channel = self.allowed_temperature_monitors[0].output_1 # set channel "A" active at the start
-        # self.initialize_measurements()
         self.populate_fields() # fields like PID, setpoint, heater mode need to be aquired and updated.
         self.start_temperature_polling()
 
@@ -497,7 +416,7 @@ class TemperatureScreen(Screen):
         
         self.get_temperatures(self.fetch_gettable_channels_and_parameters)
 
-        print(f"{channel.print_readable_snapshot()}")
+        # print(f"{channel.print_readable_snapshot()}")
 
     def start_setpoint_dragging(self) -> None: 
         p, i, d = 50, 0.5, 10
@@ -638,7 +557,7 @@ class TemperatureScreen(Screen):
         if handler:
             handler(channel, str(event.pressed.label))
             
-        channel.print_readable_snapshot()
+        # channel.print_readable_snapshot()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if not event.input.id:
@@ -659,7 +578,7 @@ class TemperatureScreen(Screen):
         if handler:
             handler()
 
-        channel.print_readable_snapshot()
+        # channel.print_readable_snapshot()
 
     def start_temperature_polling(self) -> None:
         self.update_timer = self.set_interval(self.polling_interval, self.poll_temperature_controller)

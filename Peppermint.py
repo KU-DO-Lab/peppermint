@@ -1,4 +1,4 @@
-import os
+import atexit
 import pyvisa
 import argparse
 
@@ -9,7 +9,7 @@ from textual.theme import Theme
 from utils.util import *
 from utils.themes import *
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from qcodes.dataset import initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import Parameter
 from qcodes.instrument import VisaInstrument
@@ -23,19 +23,22 @@ from utils.ElectronicMeasurementsScreen import *
 from utils.MainScreen import *
 
 @dataclass
-class SharedState():
+class SharedState:
     """Dataclass for keeping track of the state of the application. 
-
     Important global variables (such as the parameters and what instruments are being used) are saved using this.
     """
-    def __init__(self):
-        super().__init__()  # must be super init-ed for reactivity.
-        detected_instruments: reactive[list[str]] = reactive(list) 
-        connected_instruments: reactive[list[VisaInstrument]] = reactive(list) 
-        read_parameters: reactive[list[Parameter]] = reactive(list)
-        write_parameters: reactive[list[Parameter]] = reactive(list)
-        database_path: str = ""
-        experiment: Experiment | None = None 
+    # Define attributes at class level with default values
+    detected_instruments: reactive[list[str]] = field(default_factory=lambda: reactive(list))
+    connected_instruments: reactive[list[VisaInstrument]] = field(default_factory=lambda: reactive(list))
+    read_parameters: reactive[list[Parameter]] = field(default_factory=lambda: reactive(list))
+    write_parameters: reactive[list[Parameter]] = field(default_factory=lambda: reactive(list))
+    # database_path: str = ""
+    # experiment: Experiment | None = None
+    datasaver: DataSaver | None = None
+    
+    def __post_init__(self):
+        """Called after dataclass initialization."""
+        super().__init__()
         
 class Peppermint(App):
     """The app."""
@@ -48,8 +51,9 @@ class Peppermint(App):
         self.state.connected_instruments = []
         self.state.write_parameters = []
         self.state.read_parameters = []
-        self.state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
-        self.state.experiment = None 
+        # self.state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
+        # self.state.experiment = None 
+        self.state.datasaver = DataSaver("./datasaver2.db")
 
     CSS_PATH = "Peppermint.css"
 
@@ -81,11 +85,6 @@ class Peppermint(App):
         self.push_screen('main_screen')
         # initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
 
-    # async def on_exit(self):
-    #     # Perform cleanup tasks here
-    #     print("Application is exiting. Performing cleanup...")
-
-
 # Run the application, check args at the start
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Peppermint")
@@ -100,3 +99,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     Peppermint(simulated_mode=args.simulated_instruments).run()
+
+@atexit.register 
+def exit_handler() -> None: 
+    ...
