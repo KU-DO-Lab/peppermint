@@ -1,14 +1,18 @@
+from contextlib import contextmanager
+from functools import wraps
 import os
 import re
 import sqlite3
+from bokeh.application.application import Application
+from bokeh.application.handlers.function import FunctionHandler
+from bokeh.io import show
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
 import pyvisa
-from qcodes.dataset import Measurement, initialise_database, new_experiment, plot_dataset
 from qcodes.instrument import VisaInstrument
-from typing import Optional, List
+from typing import Any, Generator, Optional, List, Sequence, Tuple
 import time, datetime
 import webbrowser # to open the bokeh plot automatically without blocking the terminal
 from queue import Queue
@@ -16,10 +20,12 @@ import threading
 from collections import deque
 
 from qcodes.parameters import Parameter
+from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
+from textual.worker import get_current_worker
 from utils.drivers.Lakeshore_336 import LakeshoreModel336
 from utils.drivers.Keithley_2450 import Keithley2450
 
@@ -36,19 +42,46 @@ import datetime
 from typing import List
 
 from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
-import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, LoggingEventHandler
 
+def run_concurrent(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(func, *args, **kwargs)
+            return future
+    return wrapper
+
 class DataSaver:
     def __init__(self, path: str) -> None:
-
         self.path = path
+        self.local = threading.local()
+
+    def get_connection(self) -> sqlite3.Connection:
+        """Returns a thread-local SQLite connection."""
+        if not hasattr(self.local, 'connection'):
+            conn = sqlite3.connect(self.path)
+            self.local.connection = conn
+        return self.local.connection
+
+    @contextmanager
+    def ds_connection(self) -> Generator[Any, Any, Any]:
+        """Provides a connection to use with the "with" statement."""
+        conn = self.get_connection()
         try:
-            self.conn = sqlite3.connect(path) # Persistent connection
-            self.cursor = self.conn.cursor()
-        except sqlite3.OperationalError as e:
-            print(f"Failed to open database {e}")
+            yield conn 
+        finally:
+            pass
+
+    @contextmanager
+    def ds_cursor(self) -> Generator[Any, Any, Any]:
+        """Provides a cursor to use with the "with" statement."""
+        cursor = self.get_connection().cursor()
+        try:
+            yield cursor 
+        finally:
+            pass
 
     def get_tables(self) -> List[str]:
         """Grab all of the tables in the opened db.
@@ -66,10 +99,22 @@ class DataSaver:
             name NOT LIKE 'sqlite_%';
         """
 
-        res = self.conn.execute(query)
-        tables = [row[0] for row in res.fetchall()]
+        with self.ds_connection() as conn:
+            res = conn.execute(query)
+            tables = [row[0] for row in res.fetchall()]
 
         return tables
+
+    def get_columns(self, table_name):
+        """Returns column names from a table"""
+
+        query = f"""SELECT name FROM PRAGMA_TABLE_INFO("{table_name}");"""
+
+        with self.ds_connection() as conn:
+            res = conn.execute(query)
+            names = [col[0] for col in res.fetchall()]
+
+        return names
 
     def register_table(self, name) -> str:
         """Create a table/experiment in the database. If table exists, registers with name_# for duplicates."""
@@ -98,8 +143,9 @@ class DataSaver:
         );
         """
 
-        self.conn.execute(create_table)
-        self.conn.commit()
+        with self.ds_connection() as conn:
+            conn.execute(create_table)
+            conn.commit()
 
         return new_table_name
 
@@ -107,26 +153,28 @@ class DataSaver:
         """Check if a column exists in the specified table."""
 
         try:
-            cursor = self.conn.execute(f'PRAGMA table_info("{table_name}");')
-            columns = [row[1] for row in cursor.fetchall()]  # row[1] is the column name
+            with self.ds_connection() as conn:
+                cursor = conn.execute(f'PRAGMA table_info("{table_name}");')
+                columns = [row[1] for row in cursor.fetchall()]  # row[1] is the column name
             return column_name in columns
         except sqlite3.Error:
             return False
 
-    def ensure_column_exists(self, table_name: str, column_name: str, column_type: str = "NUMERIC") -> None:
+    def _ensure_column_exists(self, table_name: str, column_name: str, column_type: str = "NUMERIC") -> None:
         """Ensure a column exists in the table, create it if it doesn't."""
 
         if not self._column_exists(table_name, column_name):
             try:
                 query = f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {column_type};'
-                self.conn.execute(query)
-                self.conn.commit()
+                with self.ds_connection() as conn:
+                    conn.execute(query)
+                    conn.commit()
                 print(f"Added column '{column_name}' to table '{table_name}'")
             except sqlite3.Error as e:
                 print(f"Error adding column '{column_name}': {e}")
                 raise
 
-    def ensure_table_exists(self, table_name: str) -> None:
+    def _ensure_table_exists(self, table_name: str) -> None:
         """Ensure the table exists with proper param/value structure."""
 
         query = f"""
@@ -137,8 +185,9 @@ class DataSaver:
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         """
-        self.conn.execute(query)
-        self.conn.commit()
+        with self.ds_connection() as conn:
+            conn.execute(query)
+            conn.commit()
 
     def add_result(self, table_name: str, param_value_pair: list[tuple[Parameter, float]]) -> None:
         """Add a set of values to a table. Automatically creates columns for the parameters if they do not exist."""
@@ -146,11 +195,11 @@ class DataSaver:
         if not param_value_pair:
             return
         
-        self.ensure_table_exists(table_name)
+        self._ensure_table_exists(table_name)
         
         # Ensure all columns exist
         for parameter, _ in param_value_pair:
-            self.ensure_column_exists(table_name, f"{parameter.full_name}", "NUMERIC")
+            self._ensure_column_exists(table_name, f"{parameter.full_name}", "NUMERIC")
         
         # Insert all values in one row
         column_names = [f'"{param.full_name}"' for param, _ in param_value_pair]  # Fixed: use underscore
@@ -160,8 +209,62 @@ class DataSaver:
         placeholders = ", ".join(["?" for _ in values]) # Use placeholders to let SQLite insert the values below
         
         query = f'INSERT INTO "{table_name}" ({columns_str}) VALUES ({placeholders});'
-        self.cursor.execute(query, values) # Pass the query and values now
-        self.conn.commit()
+
+        with self.ds_cursor() as cursor:
+            cursor.execute(query, values) # Pass the query and values now
+
+        with self.ds_connection() as conn:
+            conn.commit()
+
+    def get_column_values(self, table_name: str, column_name: str) -> List[Any] | None:
+        """Grab all of the data from a column. Should only really be used to query a few rows, use streaming otherwise."""
+
+        if not self._column_exists(table_name, column_name):
+            return None
+
+        query = f'SELECT "{column_name}" FROM "{table_name}"'
+        with self.ds_cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            rows = [row[0] for row in rows]
+
+        return rows
+
+    def get_table_values(self, table_name: str) -> dict | None:
+        """Returns the entire table as a dict[column_name: List[values]]."""
+        query = f'SELECT * FROM "{table_name}"'
+
+        with self.ds_cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+        columns = rows[0].keys() if rows else []
+        data = {col: [] for col in columns}
+
+        for row in rows:
+            for col in columns:
+                data[col].append(row[col])
+
+        return data
+
+    def get_tail_values(self, table_name: str, tail: int) -> dict[str, Sequence[Any]]:
+        """Returns dict[column: list_of_values] containing the last number of entries determined by tail."""
+
+        query = f'SELECT * FROM "{table_name}" ORDER BY ID DESC LIMIT ?'
+
+        with self.ds_cursor() as cursor:
+            cursor.execute(query, (tail,))
+            rows = cursor.fetchall()
+
+            columns = [desc[0] for desc in cursor.description]
+
+        # Transpose rows to column-wise data
+        data = {col: [] for col in columns}
+        for row in rows:
+            for col, val in zip(columns, row):
+                data[col].append(val)
+
+        return dict(data)
 
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
@@ -200,8 +303,6 @@ class Sweep1D:
     def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep."""
 
-        # print("sweeping keithley!")
-
         # initialise_database()
         # experiment = new_experiment(name="Keithley_2450_example", sample_name="no sample")
         self.instrument.output_enabled.set_to(True)
@@ -215,9 +316,6 @@ class Sweep1D:
         voltage = self.instrument.sense.function("voltage")
         with self.instrument.output_enabled.set_to(True):
             voltage = self.instrument.sense.voltage()
-
-        # print("Approx. resistance: ", voltage / current_setpoint)
-
 
         # self.instrument.sense.function("voltage")
         # self.instrument.sense.auto_range(True)
@@ -269,11 +367,9 @@ class ActionSequence:
             ... # will have to work out how to notify properly here
         else:
             for (i, fn) in enumerate(self.sequence):
-                # print(f"sweeping {i}")
                 future = self.executor.submit(fn.start)
                 result = future.result()  # Blocks until the function is done
                 self.idx = i
-                # print(f"Signal: {result}")
 
     def stop(self) -> None:
         """Totally stops the sequence. Requires status to be paused to prevent accidental stops."""
@@ -290,9 +386,10 @@ class ActionSequence:
             return ("running", self.idx)
 
 class DatabaseChangeHandler(FileSystemEventHandler):
-    def __init__(self, db_path):
+    def __init__(self, db_path, action):
         self.db_path = db_path
         self.last_modified = os.path.getmtime(db_path)
+        self.action = action
     
     def on_modified(self, event):
         if event.src_path == self.db_path:
@@ -302,9 +399,7 @@ class DatabaseChangeHandler(FileSystemEventHandler):
                 self.handle_database_change()
     
     def handle_database_change(self):
-        print("Database changed!")
-        # Your Python code here
-        # Check what changed, process data, etc.
+        self.action()
 
 class LivePlotter: 
     """Real-time data plotter implementing multiple display modes.
@@ -326,35 +421,115 @@ class LivePlotter:
     (2) Textual (WIP): ASCII display for fun and a quick glance
     """
 
-    def __init__(self, database: DataSaver, table_name: str, max_points: int = 2**18, xlabel: str = "x-axis", ylabel: str = "y-axis", title = "Title") -> None:
-        self.data_queue = Queue()
-        self.database = database
+    def __init__( 
+        self, datasaver, table_name: str, max_points: int = 2**18, 
+        xlabel: str = "x-axis", ylabel: str = "y-axis", title: str = "Title"
+    ):
+        self.datasaver = datasaver
         self.title = title 
         self.xlabel = xlabel
         self.ylabel = ylabel
-        self.max_points = max_points
         self.table_name = table_name
-
+        
+        # 1. Watchdog setup 
         self.observer = Observer()
-        self.observer.schedule(event_handler=DatabaseChangeHandler(self.database.path), path=os.path.dirname(self.database.path))
-        self.observer.start()
+        self.observer.schedule(
+            event_handler=DatabaseChangeHandler(self.datasaver.path, self.update_plot), 
+            path=os.path.dirname(self.datasaver.path)
+        )
+        
+        # 2. Bokeh components
+        self.source = ColumnDataSource()
+        
+        # 3. Initialize with existing data
+        table_contents = self.datasaver.get_table_values(self.table_name)
+        if table_contents:
+            for key, value in table_contents.items():
+                self.source.data[key] = value
+        
+        # 4. Create plot
+        self.plot = figure(
+            title=self.title,
+            x_axis_label=self.xlabel,
+            y_axis_label=self.ylabel,
+            tools="xpan,xwheel_zoom,xbox_zoom,reset"
+        )
+        self.plot.x_range.follow = "end"
+        self.plot.x_range.follow_interval = 100
+        self.plot.x_range.range_padding = 0
+        self.plot.line(x='id', y='simulated_lakeshore336_B_temperature', source=self.source)
+        
+        # 5. Server setup (necessary for streaming)
+        self.server = None
+        self.browser_opened = False
+        self.running = False
+        self._doc = None  # Store reference to Bokeh document
 
-    # def _update_plot(self) -> None:
-    #     """Update the plot with new data."""
+    def _open_browser(self):
+        """Open the web browser. Not handled by Bokeh automatically."""
+        webbrowser.open("http://localhost:5006")
+        self.browser_opened = True
 
+    def update_plot(self) -> None:
+        """Updates plot by streaming latest table values when watchdog detects a change."""
+        if not self.server or not self._doc:
+            return  # Server/document not ready yet
+            
+        data = self.datasaver.get_tail_values(self.table_name, 1)
+        if data:
+            # Use server context to safely modify document from another thread
+            def update_doc():
+                try:
+                    # Ensure all keys exist in source
+                    for key in data:
+                        if key not in self.source.data:
+                            self.source.data[key] = []
+                    
+                    # Stream the new data
+                    self.source.stream(data)
+                except Exception as e:
+                    print(f"Error updating plot: {e}")
+            
+            # Execute update within Bokeh's document context
+            try:
+                self.server.io_loop.add_callback(lambda: self._doc.add_next_tick_callback(update_doc))
+            except Exception as e:
+                print(f"Error scheduling update: {e}")
 
-        # while not self.data_queue.empty():
-        #     channel, x, y = self.data_queue.get()
-        #     if self.use_timestamps:
-        #         # Convert x to a timestamp if use_timestamps is enabled
-        #         x = datetime.datetime.fromtimestamp(x)
-        #     self.plot_data[channel]["x"].append(x)
-        #     self.plot_data[channel]["y"].append(y)
-        #     self.sources[channel].data = {
-        #         'x': list(self.plot_data[channel]["x"]),
-        #         'y': list(self.plot_data[channel]["y"])
-        #     }
+    def bkapp(self, doc):
+        """Bokeh server app to run the plot."""
+        self._doc = doc  # Store document reference
+        doc.add_root(self.plot)
+        doc.title = self.title
+        
+        if not self.running:
+            self.running = True
+            # Now it's safe to start the watchdog
+            self.observer.start()
 
+    def start(self) -> None:
+        """Start the Bokeh server and open in browser."""
+        if not self.server:
+            self.server = Server({'/': self.bkapp}, port=5006)
+            self.server.start()
+            
+            # Open browser in a separate thread
+            if not self.browser_opened:
+                browser_thread = threading.Thread(target=self._open_browser, daemon=True)
+                browser_thread.start()
+
+    def stop(self) -> None:
+        """Stop the plotter and clean up resources."""
+        self.running = False
+        
+        # Stop watchdog observer
+        if hasattr(self, 'observer'):
+            self.observer.stop()
+            self.observer.join()
+        
+        # Stop Bokeh server
+        if self.server:
+            self.server.stop()
 
 class SimpleLivePlotter:
     """Real-time data plotter using Bokeh for external GUI.
@@ -493,8 +668,6 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     - Type hinting
     - Prompt for name
     """
-
-    # print(name)
 
     # If we need to test without access to the lab hardware, just create a dummy instrument
     if name == "simulated_lakeshore":
