@@ -4,13 +4,14 @@ from qcodes.instrument import VisaInstrument
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Center, Horizontal, Vertical
-from textual.reactive import Reactive
 from textual.screen import Screen
-from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button, Switch
+from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button
 
-from utils.drivers.Keithley_2450 import Keithley2450
-from utils.drivers.M4G_qcodes_official import CryomagneticsModel4G
-from utils.util import ActionSequence, Sweep1D, safe_query_value
+from drivers.Keithley_2450 import Keithley2450
+from drivers.M4G_qcodes_official import CryomagneticsModel4G
+from util import safe_query_value
+from sweep1d import Sweep1D
+from actionsequence import ActionSequence
 
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.

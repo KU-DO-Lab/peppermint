@@ -2,25 +2,24 @@ import atexit
 import pyvisa
 import argparse
 
-from qcodes.dataset.experiment_container import Experiment
 from textual.app import App
 from textual.theme import Theme
 
-from utils.util import *
-from utils.themes import *
+from util import *
+from datasaver import DataSaver
+from themes import *
 from typing import Optional
 from dataclasses import dataclass, field
-from qcodes.dataset import initialise_or_create_database_at, load_or_create_experiment
 from qcodes.parameters import Parameter
 from qcodes.instrument import VisaInstrument
 from textual.reactive import reactive
 
-from utils.InstrumentsScreen import *
-from utils.TemperatureScreen import *
-from utils.ParametersScreen import *
-from utils.SettingsScreen import *
-from utils.ElectronicMeasurementsScreen import *
-from utils.MainScreen import *
+from screens.InstrumentsScreen import *
+from screens.TemperatureScreen import *
+from screens.ParametersScreen import *
+from screens.SettingsScreen import *
+from screens.ElectronicMeasurementsScreen import *
+from screens.MainScreen import *
 
 @dataclass
 class SharedState:
@@ -51,11 +50,9 @@ class Peppermint(App):
         self.state.connected_instruments = []
         self.state.write_parameters = []
         self.state.read_parameters = []
-        # self.state.database_path = os.path.join(os.getcwd(), "TMP_experiment_container.db") # this is a horrible temporary thing, this should be set on startup or in experiments menu
-        # self.state.experiment = None 
-        self.state.datasaver = DataSaver("./datasaver2.db")
+        self.state.datasaver = DataSaver("./datasaver.db")
 
-    CSS_PATH = "Peppermint.css"
+    CSS_PATH = "peppermint.css"
 
     BINDINGS = [
         ("i", "push_screen('instrument_screen')", "Instruments"),

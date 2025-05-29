@@ -1,7 +1,7 @@
 import logging
 
 from bokeh.models import Switch
-from utils.util import *
+from util import *
 from textual import on
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen

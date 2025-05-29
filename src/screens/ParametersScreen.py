@@ -1,4 +1,4 @@
-from utils.util import *
+from util import *
 from typing import Optional
 from qcodes.parameters import GroupParameter, ParameterBase
 from qcodes.instrument import VisaInstrument
