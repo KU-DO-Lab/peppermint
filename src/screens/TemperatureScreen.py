@@ -1,8 +1,10 @@
 from collections import deque
 from typing import Any, Dict, Optional
 
-from utils.drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
-from utils.util import *
+from drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
+from util import *
+from simpleliveplotter import SimpleLivePlotter
+from liveplotter import LivePlotter
 
 import numpy as np
 from qcodes.parameters import GroupParameter, MultiParameter, ParameterBase
@@ -66,14 +68,6 @@ class TemperatureScreen(Screen):
             # 'C': self.chC_temperature_widget,
             # 'D': self.chD_temperature_widget
         }
-        
-        # Initialize experiments for each channel
-        # for channel in list(self.channel_widgets.keys()): # [A,B,C,D]
-        #     exp_name = f"Temperature_Channel_{channel}"
-        #     self.experiments[channel] = load_or_create_experiment(
-        #         experiment_name=exp_name,
-        #         sample_name="Lakeshore Auto Monitor"
-        #     )
 
         self.plotter = SimpleLivePlotter(
             channels=list(self.channel_widgets.keys()),
@@ -293,7 +287,7 @@ class TemperatureScreen(Screen):
 
         # Get values from all parameters
         values = self.multi_temp_param.get_raw()
-        current_time = time.time()
+        current_time = datetime.datetime.now().timestamp()
 
         # Build result tuples: (individual_param, value)
         result_tuples = [(param, value) for param, value in zip(params, values)]
@@ -436,7 +430,7 @@ class TemperatureScreen(Screen):
         self.notify("stopping dragging")
         self.is_dragging = False
 
-    def guess_next_setpoint_for_dragging(self, stop, threshold, target_gradient: float, p: float, i: float, d: float) -> float:
+    def guess_next_setpoint_for_dragging(self, stop, target_gradient: float, p: float, i: float, d: float) -> float:
         """Guess the next setpoint when using the 'setpoint dragging' feature.
 
         This implementation uses a PID algorithm to adjust the setpoint for maintaining a steady descent rate.
@@ -462,9 +456,6 @@ class TemperatureScreen(Screen):
         # Adjust the setpoint based on the PID output
         next_setpoint = current_setpoint + output
 
-        # # Constrain the next setpoint within reasonable limits
-        # next_setpoint = max(min(next_setpoint, stop), threshold)
-
         return next_setpoint
 
     def get_channel(self) -> LakeshoreModel336CurrentSource | None:
@@ -488,10 +479,6 @@ class TemperatureScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""
-
-        last_ds = self.experiment.data_set(-1)  # Get the last run
-        last_ds.export('latest_run.csv')
-
 
         handlers = {
             "setpoint-start": lambda: (self.go_to_setpoint(self.query_one("#setpoint-field", Input).value) 

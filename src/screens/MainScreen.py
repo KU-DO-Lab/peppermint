@@ -1,5 +1,5 @@
 from textual.screen import Screen
-from utils.util import *
+from util import *
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Container
