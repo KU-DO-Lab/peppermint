@@ -40,7 +40,7 @@ Peppermint implements a versatile environment to configure a sequence of actions
 </tr>
 <tr>
   <td>
-  ![temperature monitoring](https://github.com/user-attachments/assets/)
+   ![temperature monitoring](https://github.com/user-attachments/assets/b107f986-6a67-46d8-9a9e-ca96efde19d2)
   </td>
   <td>
 ![sweeping](https://github.com/user-attachments/assets/)
@@ -48,7 +48,7 @@ Peppermint implements a versatile environment to configure a sequence of actions
 </tr>
 <tr>
 <td>
-![sequences](https://github.com/user-attachments/assets/)
+ ![measurements](https://github.com/user-attachments/assets/698296f3-0794-44af-b5fb-00a512753a65)
 </td>
 <td>
 ![experiments](https://github.com/user-attachments/assets/)
