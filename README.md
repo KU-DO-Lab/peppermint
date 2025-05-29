@@ -1,4 +1,4 @@
-# peppermint
+# Peppermint
 
  <img align="right" width="250" alt="splash screen" src="" />
 A short description with an image of the application.
