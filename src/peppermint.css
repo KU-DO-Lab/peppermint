@@ -234,9 +234,8 @@ Select {
 
 .outlined-container-horizontal-fill {
     border: round white 10%;
-    width: auto;
+    width: 95%;
     height: auto;
-    min-width: 95%
 }
 
 /*Parameters Screen*/

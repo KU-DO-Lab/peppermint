@@ -1,14 +1,15 @@
 # peppermint
 
- <img align="right" width="250" alt="clock" src="" />
+ <img align="right" width="250" alt="splash screen" src="" />
 A short description with an image of the application.
 
 ## Installation 
 
-Clone this repository and install dependencies with [poetry](https://python-poetry.org/). Then start the application using `python Peppermint.py`.
+Clone this repository and install dependencies with [poetry](https://python-poetry.org/). Then start the application using `poetry run Peppermint.py` (or equivalent commands, depending on your installation method). `poetry lock` and `poetry install` should be used to initialize your virtual environment and ensure that all packages are downloaded, once the repository is cloned.
 
 For developers, it is recommended to also install [textual-dev](https://textual.textualize.io/guide/devtools/) (included in pyproject.toml) which provides a debug console via `textual console`. To log the application to the console, run Peppermint with `textual run --dev Peppermint.py`. This allows debugging of the application at runtime.
-Additionally, if you want to work on the project remotely (i.e., you can't plug into an instrument) you can run the program using `--simulated-instruments lakeshore` or `--simulated-instruments keithley` to load Lakeshore 336 or Keithley 2450 drivers. Another way to do this is to add an instrument manually by pressing `m` on the instruments screen.
+
+Additionally, if you want to work on the project remotely (i.e., you can't plug into an instrument) you can run the program using the `--simulated-instruments lakeshore` or `--simulated-instruments keithley` flags to load simulated Lakeshore 336 or Keithley 2450 drivers. Another way to do this is to add an instrument manually by pressing `m` on the instruments screen. At the time of writing, this does not properly refresh the instruments when adding a simulated instrument, so it may seem that it does not exist. Confirm this in the parameters screen (`p`).
 
 ## Features
 
