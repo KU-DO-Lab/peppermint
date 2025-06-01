@@ -46,4 +46,3 @@ class MainScreen(Screen):
         self.connected_instrument_list.clear_options()
         for instrument in self.app.state.connected_instruments:
             self.connected_instrument_list.add_option(instrument.name)
-
