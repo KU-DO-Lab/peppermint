@@ -43,37 +43,14 @@ class Sweep1D:
     def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep."""
 
-        self.instrument.output_enabled.set_to(True)
-        self.instrument.reset()
-
-        self.instrument.terminals("front")
-        self.instrument.source.function("current")
-        self.instrument.source.current(1e-6)  # Put 1uA through the resistor
-        current_setpoint = self.instrument.source.current()
-
-        voltage = self.instrument.sense.function("voltage")
         with self.instrument.output_enabled.set_to(True):
-            voltage = self.instrument.sense.voltage()
+            self.instrument.reset()
 
-        # self.instrument.sense.function("voltage")
-        # self.instrument.sense.auto_range(True)
-        #
-        # self.instrument.source.function("current")
-        # self.instrument.source.auto_range(True)
-        # self.instrument.source.limit(2)
-        # self.instrument.source.sweep_setup(0, 1e-6, 10)
+            self.instrument.sense.function("voltage")
+            self.instrument.sense.auto_range(True)
+            self.instrument.source.function("current")
+            self.instrument.source.auto_range(True)
+            self.instrument.source.limit(2)
+            self.instrument.source.sweep_setup(0, 1e-6, 10)
 
-        # keithley.sense.four_wire_measurement(True)
-        #
-        # meas = Measurement(exp=experiment)
-        # meas.register_parameter(keithley.sense.sweep)
-        #
-        # with meas.run() as datasaver:
-        #     datasaver.add_result(
-        #         (keithley.source.sweep_axis, keithley.source.sweep_axis()),
-        #         (keithley.sense.sweep, keithley.sense.sweep()),
-        #     )
-        #
-        #     dataid = datasaver.run_id
-        #
-        # plot_dataset(datasaver.dataset)
+            print((self.instrument.sense.sweep, self.instrument.sense.sweep()))

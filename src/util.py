@@ -17,6 +17,8 @@ from drivers.Lakeshore_336 import LakeshoreModel336
 from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
 
+from watchdog.events import FileSystemEventHandler
+
 def run_concurrent(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -24,9 +26,6 @@ def run_concurrent(func):
             future = executor.submit(func, *args, **kwargs)
             return future
     return wrapper
-
-import os
-from watchdog.events import FileSystemEventHandler
 
 class DatabaseChangeHandler(FileSystemEventHandler):
     def __init__(self, db_path, action):
