@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 from drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from util import *
-from simpleliveplotter import SimpleLivePlotter
+# from simpleliveplotter import SimpleLivePlotter
 from liveplotter import LivePlotter
 
 import numpy as np
@@ -69,17 +69,12 @@ class TemperatureScreen(Screen):
             # 'D': self.chD_temperature_widget
         }
 
-        self.plotter = SimpleLivePlotter(
-            channels=list(self.channel_widgets.keys()),
-            title="Automated Temperature Monitor",
-            xlabel="time (s)",
-            ylabel="temperature (k)",
-            use_timestamps=True,
-        )
-
-        self.plotter2 = LivePlotter(
+        self.plotter = LivePlotter(
             self.app.state.datasaver,
-            self.table_name
+            self.table_name,
+            title="Temperature Monitor",
+            xlabel="Timestamp", 
+            ylabel="Temperature (k)",
         )
             
     def compose(self) -> ComposeResult:
@@ -302,10 +297,6 @@ class TemperatureScreen(Screen):
             # Update widget
             if channel_name in self.channel_widgets:
                 self.channel_widgets[channel_name].update(str(value))
-
-            # Update plot
-            if self.plotter:
-                self.plotter.update(channel_name, x=current_time, y=value)
 
             # Update statistics buffer
             if channel_name not in self.stats_buffer:
@@ -582,11 +573,7 @@ class TemperatureScreen(Screen):
 
     def action_initialize_plot(self) -> None:
         """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
-        self.plotter2.start()
-        # if not self.plotter.running:
-        #     self.plotter.start()
-        # else:
-        #     self.notify("Plotter already running!")
+        self.plotter.start()
 
     def action_stop_monitoring(self) -> None:
         """Stop the plot"""

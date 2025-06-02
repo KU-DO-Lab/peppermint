@@ -2,7 +2,7 @@ from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.server.server import Server
 from bokeh.palettes import Spectral11
-from typing import Any, Generator, Optional, List, Sequence, Tuple
+from typing import List
 import time, datetime
 import webbrowser # to open the bokeh plot automatically without blocking the terminal
 from queue import Queue
@@ -21,7 +21,7 @@ import datetime
 from typing import List
 
 class SimpleLivePlotter:
-    """Real-time data plotter using Bokeh for external GUI.
+    """(DEPRECATED) Real-time data plotter using Bokeh for external GUI.
 
     This class allows plotting real-time data using Bokeh, updating the plot
     periodically as new data is received. Bokeh is used instead of matplotlib,
