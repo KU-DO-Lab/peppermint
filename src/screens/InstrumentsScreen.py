@@ -9,8 +9,6 @@ from textual.containers import Center, Horizontal, Vertical, Grid
 from textual.widgets import Footer, Header, Input, Label, OptionList, Button, Placeholder, Select
 
 class ManualConnectionDialog(ModalScreen):
-    """TODO: make this do something, add the right widgets"""
-
     BINDINGS = [("escape", "app.pop_screen", "Pop screen")]
 
     def compose(self) -> ComposeResult:

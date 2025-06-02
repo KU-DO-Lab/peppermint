@@ -10,7 +10,7 @@ from util import run_concurrent
 class Sweep1D:
     """Simplest sweep type. Will be upgraded to a generic class in the future. """
 
-    def __init__(self, instrument: VisaInstrument, parameter: Optional[float | None] = None, start: Optional[float | None] = None, stop: Optional[float | None] = None,
+    def __init__(self, instrument: VisaInstrument, parameter: Optional[str | None] = None, start: Optional[float | None] = None, stop: Optional[float | None] = None,
                  step: Optional[float | None] = None, rate: Optional[float | None] = None) -> None:
         self.instrument = instrument
         self.parameter = parameter 
@@ -44,17 +44,16 @@ class Sweep1D:
     @run_concurrent
     def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep."""
-        print("test")
 
         with self.instrument.output_enabled.set_to(True):
             self.instrument.reset()
             
             keithley = self.instrument
-            keithley.sense.function("current")
+            keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
             keithley.sense.range(1e-5)
             keithley.sense.four_wire_measurement(False)
 
-            keithley.source.function("voltage")
+            keithley.source.function(self.parameter)
             keithley.source.range(0.2)
             keithley.source.sweep_setup(self.start_val, self.step_val, self.stop_val)
 

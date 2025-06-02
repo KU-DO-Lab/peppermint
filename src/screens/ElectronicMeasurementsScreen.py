@@ -13,6 +13,10 @@ from util import safe_query_value
 from sweep1d import Sweep1D
 from actionsequence import ActionSequence
 
+class ModalSaveDialog(ModalScreen):
+    """Modal screen to handle configuration of table to save measurement to."""
+    pass
+
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.
 
@@ -138,8 +142,8 @@ class ElectronicMeasurementsScreen(Screen):
         super().__init__()
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
-        # date = datetime.datetime.now().strftime('%d.%b.%Y')
-        # self.table_name = self.app.state.datasaver.register_table(f"Measurements: {date}") # Resolves duplicates, so there may be a numeric tag at the end of the name and we assign this way.
+        date = datetime.datetime.now().strftime('%d.%b.%Y')
+        self.table_name: str | None = None
 
 
     def compose(self) -> ComposeResult:
@@ -178,7 +182,7 @@ class ElectronicMeasurementsScreen(Screen):
             ),
         )
         yield Footer()
-
+        
     def create_list_item(self) -> None:
         """Add an entry to the sweep configuration column."""
         self.sweeps_configurator.mount(SweepCreatorItem())
@@ -205,7 +209,6 @@ class ElectronicMeasurementsScreen(Screen):
         idx = self.sweeps_sequence.index # selected idx
         self.sweeps_sequence.pop(idx) # remove it
 
-
     def append_sweep_to_sequence(self) -> None:
         """Turn each item in the list into a single sweep and add it to the list."""
         try:
@@ -219,12 +222,11 @@ class ElectronicMeasurementsScreen(Screen):
                 rate = safe_query_value(child, "#rate-field", Input)
 
                 # only implemented sweep1D atm, will upgrade to a generic later
-                # print(type(instrument))
                 match instrument:
                     case Keithley2450():
-                        sweep = Sweep1D(instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
+                        sweep: Sweep1D = Sweep1D(instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
                     case CryomagneticsModel4G():
-                        sweep = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
+                        sweep: Sweep1D = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
 
                 self.sweeps_sequence.append(SweepSequenceItem(sweep))
         except Exception as e:
@@ -251,12 +253,15 @@ class ElectronicMeasurementsScreen(Screen):
             "append-sweep-to-sequence": self.append_sweep_to_sequence,
             "remove-sequence-item": self.remove_sequence_item,
             "start-sequence": self.start_sequence,
+            "configure-save": lambda: self.app.push_screen('configure_save_dialog'),
         }
 
         widget: SweepCreatorItem | None = next(
             (elm for elm in event.button.ancestors if isinstance(elm, SweepCreatorItem)), 
             None
         )
+        
+        # hacky implementation to pass the widget if the handler needs it (sweep creator items), otherwise call normally
         handler = handlers.get(str(event.button.id))
         if handler:
             try:
