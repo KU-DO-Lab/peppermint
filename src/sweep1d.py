@@ -4,6 +4,7 @@ import threading
 from drivers.Keithley_2450 import Keithley2450
 import threading
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
+from util import run_concurrent
 
 
 class Sweep1D:
@@ -40,17 +41,21 @@ class Sweep1D:
         self.instrument.reset()
         self.instrument.operating_mode(True) # remote mode
 
+    @run_concurrent
     def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep."""
+        print("test")
 
         with self.instrument.output_enabled.set_to(True):
             self.instrument.reset()
+            
+            keithley = self.instrument
+            keithley.sense.function("current")
+            keithley.sense.range(1e-5)
+            keithley.sense.four_wire_measurement(False)
 
-            self.instrument.sense.function("voltage")
-            self.instrument.sense.auto_range(True)
-            self.instrument.source.function("current")
-            self.instrument.source.auto_range(True)
-            self.instrument.source.limit(2)
-            self.instrument.source.sweep_setup(0, 1e-6, 10)
+            keithley.source.function("voltage")
+            keithley.source.range(0.2)
+            keithley.source.sweep_setup(self.start_val, self.step_val, self.stop_val)
 
             print((self.instrument.sense.sweep, self.instrument.sense.sweep()))

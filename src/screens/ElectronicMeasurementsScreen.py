@@ -138,7 +138,9 @@ class ElectronicMeasurementsScreen(Screen):
         super().__init__()
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
-        self.datasavers: Dict[str, Any] = {}
+        # date = datetime.datetime.now().strftime('%d.%b.%Y')
+        # self.table_name = self.app.state.datasaver.register_table(f"Measurements: {date}") # Resolves duplicates, so there may be a numeric tag at the end of the name and we assign this way.
+
 
     def compose(self) -> ComposeResult:
         self.sweeps_configurator = ListView(classes="outlined-container-fill-horizontal", id="sweep-info")
@@ -167,7 +169,7 @@ class ElectronicMeasurementsScreen(Screen):
                 Rule(),
                 Horizontal(
                     Button("Save!"),
-                    Button("Start Sequence", disabled=True, id="start-sequence"),
+                    Button("Start Sequence", id="start-sequence"),
                     Button("-", classes="inline-right", id="remove-sequence-item"),
                     classes="container-fill-horizontal",
                 ),
