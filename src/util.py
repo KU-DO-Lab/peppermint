@@ -31,16 +31,24 @@ from watchdog.events import FileSystemEventHandler
 class DatabaseChangeHandler(FileSystemEventHandler):
     def __init__(self, db_path, action):
         self.db_path = db_path
+        self.dir_path = os.path.dirname(db_path)
+        self.base_name = os.path.basename(db_path)
         self.last_modified = os.path.getmtime(db_path)
         self.action = action
-    
+
     def on_modified(self, event):
-        if event.src_path == self.db_path:
-            current_time = os.path.getmtime(self.db_path)
-            if current_time > self.last_modified:
-                self.last_modified = current_time
-                self.handle_database_change()
-    
+        if not event.is_directory and self._is_related_file(event.src_path):
+            try:
+                current_time = os.path.getmtime(self.db_path)
+                if current_time > self.last_modified:
+                    self.last_modified = current_time
+                    self.handle_database_change()
+            except FileNotFoundError:
+                pass  # File might be locked or temporarily inaccessible
+
+    def _is_related_file(self, path):
+        return any(path.endswith(suffix) for suffix in [self.base_name, '-wal', '-journal'])
+
     def handle_database_change(self):
         self.action()
 
