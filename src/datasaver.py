@@ -92,7 +92,8 @@ class DataSaver:
 
         create_table = f"""
         CREATE TABLE IF NOT EXISTS "{new_table_name}" (
-            id INTEGER PRIMARY KEY
+            `id` INTEGER PRIMARY KEY,
+            `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         """
 

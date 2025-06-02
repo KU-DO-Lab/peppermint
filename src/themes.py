@@ -6,8 +6,8 @@ BUILTIN_THEMES: dict[str, TextualTheme] = {
     "oxocarbon": TextualTheme(
         # https://github.com/nyoom-engineering/oxocarbon/blob/main/docs/style-guide.md
         name="oxocarbon",
-        primary="#be95ff", 
-        secondary="#33b1ff", 
+        primary="#33b1ff", 
+        secondary="#be95ff", 
         warning="#3bbdb9", 
         error="#ee5396", 
         success="#42be65", 

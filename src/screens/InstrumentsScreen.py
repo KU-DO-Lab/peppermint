@@ -124,3 +124,12 @@ class InstrumentsScreen(Screen):
             self.connected_instrument_list.clear_options()
             for instrument in connected_instruments:
                 self.connected_instrument_list.add_option(instrument.name)
+                
+    async def on_screen_resume(self) -> None:
+        """Handle the ScreenResume event."""
+
+        # Refresh the connected instruments when the screen is reloaded.
+        self.connected_instrument_list.clear_options()
+        for instrument in self.app.state.connected_instruments:
+            self.connected_instrument_list.add_option(instrument.name)
+

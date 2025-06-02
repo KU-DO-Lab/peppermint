@@ -582,10 +582,11 @@ class TemperatureScreen(Screen):
 
     def action_initialize_plot(self) -> None:
         """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
-        if not self.plotter.running:
-            self.plotter.start()
-        else:
-            self.notify("Plotter already running!")
+        self.plotter2.start()
+        # if not self.plotter.running:
+        #     self.plotter.start()
+        # else:
+        #     self.notify("Plotter already running!")
 
     def action_stop_monitoring(self) -> None:
         """Stop the plot"""

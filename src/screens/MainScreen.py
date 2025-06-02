@@ -3,39 +3,46 @@ from util import *
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Container
-from textual.widgets import Header, Label, Button, ListView
+from textual.widgets import Footer, Header, Label, Button, ListView, OptionList
 
 class MainScreen(Screen):
+
+
     def compose(self) -> ComposeResult:
+        self.title = "Peppermint"
+        self.sub_title = "Cryogenics Measurement Suite"
+        self.connected_instrument_list: OptionList = OptionList(*self.app.state.connected_instruments)  # Start empty
+
         yield Header(show_clock=True)
         with Container(id="main-menu-grid"):
-            with Container(id="left-pane"):
-                yield Button("Instruments", id="isnt_button")
-                yield Button("Parameters", id="param_button")
-                yield Button("Temperature", id="temp_button")
-                yield Button("Experiments", id="exp_button")
-                yield Button("Settings", id="settings_button")
-            with Container(id="inst-list"):
+            with Container(id="left-pane", classes="outlined-container-horizontal-fill"):
+                yield Button("Instruments", id="isnt_button", classes="container-horizontal-fill")
+                yield Button("Parameters", id="param_button", classes="container-horizontal-fill")
+                yield Button("Temperature", id="temp_button", classes="container-horizontal-fill")
+                yield Button("Measurements", id="exp_button", classes="container-horizontal-fill")
+                yield Button("Settings", id="settings_button", classes="container-horizontal-fill")
+            with Container(id="inst-list", classes="sidebar"):
                 yield Label("Connected Instruments")
-                yield ListView(*self.app.state.connected_instruments)
+                yield self.connected_instrument_list
+        yield Footer()
 
-    @on(Button.Pressed, "#isnt_button")
-    def inst_button(self):
-        self.app.push_screen("instrument_screen")
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        handlers = {
+            "inst_button": lambda: self.app.push_screen("instrument_screen"),
+            "param_button": lambda: self.app.push_screen("parameter_screen"),
+            "temp_button": lambda: self.app.push_screen("temperature_screen"), 
+            "meas_button": lambda: self.app.push_screen("electronic_measurements_screen"), 
+            "settings_button": lambda: self.app.push_screen("settings_screen")
+        }
 
-    @on(Button.Pressed, "#param_button")
-    def param_button(self):
-        self.app.push_screen("parameter_screen")
+        handler = handlers.get(str(event.button.id))
+        if handler:
+            handler()
 
-    @on(Button.Pressed, "#temp_button")
-    def temp_button(self):
-        self.app.push_screen("temperature_screen")
+    async def on_screen_resume(self) -> None:
+        """Handle the ScreenResume event."""
 
-    @on(Button.Pressed, "#exp_button")
-    def exp_button(self):
-        self.app.push_screen("electronic_measurements_screen")
-
-    @on(Button.Pressed, "#settings_button")
-    def settings_button(self):
-        self.app.push_screen("settings_screen")
-
+        # Refresh the connected instruments when the screen is reloaded.
+        self.connected_instrument_list.clear_options()
+        for instrument in self.app.state.connected_instruments:
+            self.connected_instrument_list.add_option(instrument.name)
