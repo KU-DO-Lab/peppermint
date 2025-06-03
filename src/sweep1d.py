@@ -98,7 +98,7 @@ class Sweep1D:
     #     return np.array([float(i) for i in raw_data])
 
     @run_concurrent
-    def start_keithley2450_sweep(self) -> None:
+    def _start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
         print("Starting Keithley 2450 sweep with continuous data collection")
         

@@ -12,10 +12,11 @@ from drivers.M4G_qcodes_official import CryomagneticsModel4G
 from util import safe_query_value
 from sweep1d import Sweep1D
 from actionsequence import ActionSequence
+import datetime
 
-class ModalSaveDialog(ModalScreen):
-    """Modal screen to handle configuration of table to save measurement to."""
-    pass
+# class ModalSaveDialog(ModalScreen):
+#     """Modal screen to handle configuration of table to save measurement to."""
+#     pass
 
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.
@@ -143,7 +144,8 @@ class ElectronicMeasurementsScreen(Screen):
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
         date = datetime.datetime.now().strftime('%d.%b.%Y')
-        self.table_name: str | None = None
+        # self.table_name: str | None = None
+        self.table_name: str | None = self.app.state.datasaver.register_table(f"Measurement Test: {date}")
 
 
     def compose(self) -> ComposeResult:
@@ -224,7 +226,7 @@ class ElectronicMeasurementsScreen(Screen):
                 # only implemented sweep1D atm, will upgrade to a generic later
                 match instrument:
                     case Keithley2450():
-                        sweep: Sweep1D = Sweep1D(instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
+                        sweep: Sweep1D = Sweep1D(datasaver=self.app.state.datasaver, table_name=self.table_name, instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
                     case CryomagneticsModel4G():
                         sweep: Sweep1D = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
 
