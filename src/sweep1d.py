@@ -100,50 +100,32 @@ class Sweep1D:
     #     buffer.clear_buffer()
     #     return np.array([float(i) for i in raw_data])
 
-    def watch_buffer(self) -> None:
-        """Continuously watch circular buffer for new data."""
+    def _watch_buffer(self) -> None:
+        """Continuously watch buffer for data changes."""
         last_seen_data = None
         
         while self.is_collecting:
             try:
-                # Read the entire buffer each time (it's fixed size)
+                # Always try to read the buffer - let the instrument handle empty states
                 raw_data = self.buffer.get_data(1, self.step_val, readings_only=True)
 
-                if not raw_data:
+                if not raw_data: 
                     continue
                 
-                # Compare with last seen data to detect changes
+                # Only print when data actually changes
                 if raw_data != last_seen_data:
-                    # Buffer has new data, find what's new
-                    if last_seen_data is None:
-                        # First read - output everything that's not empty/zero
-                        new_data = [x for x in raw_data if x != 0 or x is not None]
-                        if new_data:
-                            print(new_data)
-                    else:
-                        # Find the differences (new tail values)
-                        new_values = []
-                        for i, (old, new) in enumerate(zip(last_seen_data, raw_data)):
-                            if old != new:
-                                new_values.append((i, new))
-                        
-                        if new_values:
-                            print(f"New data at positions: {new_values}")
-                            # Or just print the new values:
-                            # print([val for _, val in new_values])
-                    
+                    print(f"Buffer update: {raw_data}")
                     last_seen_data = raw_data.copy() if hasattr(raw_data, 'copy') else list(raw_data)
                 
-                # Small delay to prevent excessive polling
                 time.sleep(0.01)
                 
             except Exception as e:
-                print(f"Error during data collection: {e}")
-                self.is_collecting = False
-                break
+                # Don't break on exceptions - just log and continue
+                print(f"Buffer read error: {e}")
+                time.sleep(0.05)  # Longer delay after errors
 
     @run_concurrent
-    def start_keithley2450_sweep(self) -> None:
+    def _start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
         keithley = self.instrument
         self.buffer_name = keithley.buffer_name()
@@ -157,19 +139,15 @@ class Sweep1D:
         keithley.source.range(2)
         keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
         
-        # Clear buffer and initialize tracking BEFORE starting threads
-        self.buffer.clear_buffer()
+        # Initialize tracking - no buffer clearing
         self.is_collecting = True
         
         with ThreadPoolExecutor(max_workers=2) as executor:
-            # Start data collection first
-            future_reader = executor.submit(self.watch_buffer)
-            
-            # Brief delay to ensure reader is running
-            time.sleep(0.05)
-            
-            # Then start the sweep
             future_sweep = executor.submit(keithley.source.sweep_start)
+            
+            # Brief delay to let sweep initialize and start populating buffer
+            time.sleep(0.1)
+            future_reader = executor.submit(self._watch_buffer)
             
             # Wait for sweep to complete
             try:
