@@ -98,8 +98,8 @@ class Sweep1D:
     #     buffer.clear_buffer()
     #     return np.array([float(i) for i in raw_data])
 
-    @run_concurrent
-    def _start_keithley2450_sweep(self) -> None:
+    # @run_concurrent
+    async def _start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
         # self.instrument.reset()
         keithley = self.instrument
@@ -117,10 +117,15 @@ class Sweep1D:
         self.is_collecting = True
         self.last_read_index = 0
         
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            print("started")
-            executor.submit(keithley.source.sweep_start())
-            print("stopped")
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     print("started")
+        #     executor.submit(keithley.source.sweep_start())
+        #     print("stopped")
+
+        async def async_sweep_start(instr) -> None:
+            instr.source.sweep.start()
+
+        await async_sweep_start(keithley)
             
         end_idx: int = keithley.npts()
         print(f"start: {0}, stop: {end_idx}")
