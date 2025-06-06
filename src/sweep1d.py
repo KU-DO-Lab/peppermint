@@ -29,6 +29,7 @@ class Sweep1D:
         self.table_name = table_name
         self.last_read_index = 0
         self.is_collecting = False
+        self.reader_ready = threading.Event()
 
 
     def start(self) -> None:
@@ -100,30 +101,41 @@ class Sweep1D:
     #     return np.array([float(i) for i in raw_data])
 
     def watch_buffer(self) -> None:
-        is_collecting = True
-        end: int = self.buffer.number_of_readings() #type: ignore
-        while is_collecting:
+        """Continuously watch circular buffer for new data."""
+        last_seen_data = None
+        
+        while self.is_collecting:
             try:
-                raw_data = self.buffer.get_data(1, end, readings_only=True) #type: ignore
-                print(raw_data)
+                # Read the entire buffer each time (it's fixed size)
+                raw_data = self.buffer.get_data(1, self.step_val, readings_only=True)
 
-        #     source_values = keithley._calculate_source_values(start_idx, end_idx)
-            
-        #     # Save each new data point
-        #     new_points_count = 0
-        #     for (source_val, meas_val) in zip(source_values, raw_data):
-        #         param_value_pair = [
-        #             (keithley.source.sweep_axis, source_val),
-        #             (keithley.sense.sweep, meas_val)
-        #         ]
-        #         self.datasaver.add_result(self.table_name, param_value_pair)
-        #         new_points_count += 1
+                if not raw_data:
+                    continue
                 
-        #         # Optional: Update live plot here
-        #         # plotter.update_plot(source_val, meas_val)
-            
-        #     self.last_read_index = current_readings
-        #     print(f"Saved {new_points_count} new data points")
+                # Compare with last seen data to detect changes
+                if raw_data != last_seen_data:
+                    # Buffer has new data, find what's new
+                    if last_seen_data is None:
+                        # First read - output everything that's not empty/zero
+                        new_data = [x for x in raw_data if x != 0 or x is not None]
+                        if new_data:
+                            print(new_data)
+                    else:
+                        # Find the differences (new tail values)
+                        new_values = []
+                        for i, (old, new) in enumerate(zip(last_seen_data, raw_data)):
+                            if old != new:
+                                new_values.append((i, new))
+                        
+                        if new_values:
+                            print(f"New data at positions: {new_values}")
+                            # Or just print the new values:
+                            # print([val for _, val in new_values])
+                    
+                    last_seen_data = raw_data.copy() if hasattr(raw_data, 'copy') else list(raw_data)
+                
+                # Small delay to prevent excessive polling
+                time.sleep(0.01)
                 
             except Exception as e:
                 print(f"Error during data collection: {e}")
@@ -131,41 +143,45 @@ class Sweep1D:
                 break
 
     @run_concurrent
-    def _start_keithley2450_sweep(self) -> None:
+    def start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
-        # self.instrument.reset()
         keithley = self.instrument
-
         self.buffer_name = keithley.buffer_name()
         self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
+        
+        # Setup instrument
         keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
         keithley.sense.range(1e-5)
         keithley.sense.four_wire_measurement(False)
         keithley.source.function(self.parameter)
         keithley.source.range(2)
         keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
-            
-        # Initialize data collection variables
+        
+        # Clear buffer and initialize tracking BEFORE starting threads
+        self.buffer.clear_buffer()
         self.is_collecting = True
-        self.last_read_index = 0
         
         with ThreadPoolExecutor(max_workers=2) as executor:
-            print("started")
-            future1 = executor.submit(keithley.source.sweep_start)
-            future2 = executor.submit(self.watch_buffer)
+            # Start data collection first
+            future_reader = executor.submit(self.watch_buffer)
             
-            # Optional: wait for both to complete
-            future1.result()
-            future2.result()
-            print("stopped")
+            # Brief delay to ensure reader is running
+            time.sleep(0.05)
             
-        end_idx: int = keithley.npts()
-        print(f"start: {0}, stop: {end_idx}")
+            # Then start the sweep
+            future_sweep = executor.submit(keithley.source.sweep_start)
             
+            # Wait for sweep to complete
+            try:
+                future_sweep.result()
+            except Exception as e:
+                print(f"Sweep error: {e}")
+            finally:
+                # Signal data collection to stop
+                self.is_collecting = False
                 
-        # time.sleep(50e-3)
-            
-        #     # Clear the trace so we can be assured that a subsequent measurement
-        #     # will not be contaminated with data from this run
-        # self.buffer.clear_buffer()
-        # print("Data collection finished and buffer cleared")
+            # Wait for reader to finish
+            try:
+                future_reader.result(timeout=2)
+            except Exception as e:
+                print(f"Reader cleanup error: {e}")
