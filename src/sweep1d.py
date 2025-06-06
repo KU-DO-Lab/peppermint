@@ -100,33 +100,10 @@ class Sweep1D:
     #     buffer.clear_buffer()
     #     return np.array([float(i) for i in raw_data])
 
-    def _watch_buffer(self) -> None:
-        """Continuously watch buffer for data changes."""
-        last_seen_data = None
-        
-        while self.is_collecting:
-            try:
-                # Always try to read the buffer - let the instrument handle empty states
-                raw_data = self.buffer.get_data(1, self.step_val, readings_only=True)
-
-                if not raw_data: 
-                    continue
-                
-                # Only print when data actually changes
-                if raw_data != last_seen_data:
-                    print(f"Buffer update: {raw_data}")
-                    last_seen_data = raw_data.copy() if hasattr(raw_data, 'copy') else list(raw_data)
-                
-                time.sleep(0.01)
-                
-            except Exception as e:
-                # Don't break on exceptions - just log and continue
-                print(f"Buffer read error: {e}")
-                time.sleep(0.05)  # Longer delay after errors
-
-    @run_concurrent
-    def _start_keithley2450_sweep(self) -> None:
-        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
+# Continuous buffer reading during sweep - bypassing blocking sweep_start()
+    @run_concurrent  
+    def _start_keithley2450_sweep_continuous(self):
+        """Continuous buffer reading by using low-level SCPI commands instead of blocking sweep_start()."""
         keithley = self.instrument
         self.buffer_name = keithley.buffer_name()
         self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
@@ -137,29 +114,72 @@ class Sweep1D:
         keithley.sense.four_wire_measurement(False)
         keithley.source.function(self.parameter)
         keithley.source.range(2)
-        keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
         
-        # Initialize tracking - no buffer clearing
-        self.is_collecting = True
+        # Setup sweep parameters but DON'T call sweep_setup() - we'll do it manually
+        step_count = int(abs(self.stop_val - self.start_val) / abs(self.step_val)) + 1
+        expected_points = step_count
         
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future_sweep = executor.submit(keithley.source.sweep_start)
-            
-            # Brief delay to let sweep initialize and start populating buffer
-            time.sleep(0.1)
-            future_reader = executor.submit(self._watch_buffer)
-            
-            # Wait for sweep to complete
+        print(f"Setting up sweep: {self.start_val} to {self.stop_val}, {step_count} points")
+        
+        # Manual sweep setup using SCPI commands (avoiding the blocking wrapper)
+        function = self.parameter.upper()  # "VOLTAGE" or "CURRENT"
+        cmd = (f":SOURce:SWEep:{function}:LINear {self.start_val},{self.stop_val},"
+               f"{step_count},0,1,AUTO,ON,OFF,'{self.buffer_name}'")
+        
+        keithley.write(cmd)
+        
+        # Start sweep using non-blocking approach
+        print("Starting sweep...")
+        keithley.write(":INITiate")  # Start sweep but DON'T write "*WAI" (that's what makes it blocking)
+        
+        # Continuously monitor buffer
+        last_buffer_size = 0
+        all_data = []
+        start_time = time.time()
+        timeout = 60  # 60 second timeout
+        
+        while True:
             try:
-                future_sweep.result()
-            except Exception as e:
-                print(f"Sweep error: {e}")
-            finally:
-                # Signal data collection to stop
-                self.is_collecting = False
+                # Check if sweep is still running
+                operation_complete = keithley.ask("*OPC?").strip() == "1"
                 
-            # Wait for reader to finish
-            try:
-                future_reader.result(timeout=2)
+                # Read current buffer size
+                current_buffer_size = int(keithley.ask(f":TRACe:ACTual? '{self.buffer_name}'"))
+                
+                # If we have new data, read it
+                if current_buffer_size > last_buffer_size:
+                    # Read only the new points
+                    start_idx = last_buffer_size + 1
+                    end_idx = current_buffer_size
+                    
+                    if start_idx <= end_idx:
+                        new_data = self.buffer.get_data(start_idx, end_idx, readings_only=True)
+
+                        if not new_data: 
+                            continue
+                        
+                        for i, point in enumerate(new_data):
+                            point_number = last_buffer_size + i + 1
+                            print(f"Point {point_number}/{expected_points}: {point}")
+                            all_data.append(point)
+                    
+                    last_buffer_size = current_buffer_size
+                
+                # Check exit conditions
+                if operation_complete and current_buffer_size >= expected_points:
+                    print("Sweep completed successfully")
+                    break
+                    
+                if time.time() - start_time > timeout:
+                    print("Sweep timeout - stopping")
+                    keithley.write(":ABORt")
+                    break
+                    
+                time.sleep(0.01)  # Small delay between polls
+                
             except Exception as e:
-                print(f"Reader cleanup error: {e}")
+                print(f"Buffer monitoring error: {e}")
+                time.sleep(0.05)
+        
+        print(f"Sweep complete. Total points collected: {len(all_data)}")
+        return all_data
