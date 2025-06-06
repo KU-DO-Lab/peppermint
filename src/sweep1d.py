@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import time
 import concurrent
 from qcodes.instrument import VisaInstrument
@@ -98,49 +99,13 @@ class Sweep1D:
     #     buffer.clear_buffer()
     #     return np.array([float(i) for i in raw_data])
 
-    # @run_concurrent
-    async def _start_keithley2450_sweep(self) -> None:
-        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
-        # self.instrument.reset()
-        keithley = self.instrument
-
-        self.buffer_name = keithley.buffer_name()
-        self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
-        keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
-        keithley.sense.range(1e-5)
-        keithley.sense.four_wire_measurement(False)
-        keithley.source.function(self.parameter)
-        keithley.source.range(2)
-        keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
-            
-        # Initialize data collection variables
-        self.is_collecting = True
-        self.last_read_index = 0
-        
-        # with concurrent.futures.ThreadPoolExecutor() as executor:
-        #     print("started")
-        #     executor.submit(keithley.source.sweep_start())
-        #     print("stopped")
-
-        async def async_sweep_start(instr) -> None:
-            instr.source.sweep.start()
-
-        await async_sweep_start(keithley)
-            
-        end_idx: int = keithley.npts()
-        print(f"start: {0}, stop: {end_idx}")
-            
-        while self.is_collecting:
+    def watch_buffer(self) -> None:
+        is_collecting = True
+        end: int = self.buffer.number_of_readings() #type: ignore
+        while is_collecting:
             try:
-                current_readings: int = self.buffer.number_of_readings() # type: ignore
-                print(f"current readings: {current_readings}")
-                
-                if current_readings > self.last_read_index:
-                    # Read new data from buffer
-                    start_idx = self.last_read_index + 1
-                    
-                    raw_data = self.buffer.get_data(1, current_readings, readings_only=True)
-                    print(raw_data)
+                raw_data = self.buffer.get_data(1, end, readings_only=True) #type: ignore
+                print(raw_data)
 
         #     source_values = keithley._calculate_source_values(start_idx, end_idx)
             
@@ -160,16 +125,43 @@ class Sweep1D:
         #     self.last_read_index = current_readings
         #     print(f"Saved {new_points_count} new data points")
                 
-                # Check if sweep is complete
-                if current_readings >= keithley.npts():
-                    print("Sweep completed - all data points collected")
-                    self.is_collecting = False
-                    break
-                        
             except Exception as e:
                 print(f"Error during data collection: {e}")
                 self.is_collecting = False
                 break
+
+    @run_concurrent
+    def _start_keithley2450_sweep(self) -> None:
+        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
+        # self.instrument.reset()
+        keithley = self.instrument
+
+        self.buffer_name = keithley.buffer_name()
+        self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
+        keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
+        keithley.sense.range(1e-5)
+        keithley.sense.four_wire_measurement(False)
+        keithley.source.function(self.parameter)
+        keithley.source.range(2)
+        keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
+            
+        # Initialize data collection variables
+        self.is_collecting = True
+        self.last_read_index = 0
+        
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            print("started")
+            future1 = executor.submit(keithley.source.sweep_start)
+            future2 = executor.submit(self.watch_buffer)
+            
+            # Optional: wait for both to complete
+            future1.result()
+            future2.result()
+            print("stopped")
+            
+        end_idx: int = keithley.npts()
+        print(f"start: {0}, stop: {end_idx}")
+            
                 
         # time.sleep(50e-3)
             
