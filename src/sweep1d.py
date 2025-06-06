@@ -32,7 +32,6 @@ class Sweep1D:
 
     def start(self) -> None:
         """Handler for a sweep based on the class construction."""
-        print("handler")
         handlers = {
             Keithley2450: self._start_keithley2450_sweep,
             CryomagneticsModel4G: self._start_cryomagneticsm4g_sweep,
@@ -102,83 +101,74 @@ class Sweep1D:
     @run_concurrent
     def _start_keithley2450_sweep(self) -> None:
         """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
-        with self.instrument.output_enabled.set_to(True):
-            self.instrument.reset()
-            keithley = self.instrument
-            
-            # Setup measurement configuration
-            keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
-            keithley.sense.range(1e-5)
-            keithley.sense.four_wire_measurement(False)
-            keithley.source.function(self.parameter)
-            keithley.source.range(0.2)
-            keithley.source.sweep_setup(self.start_val, self.step_val, self.stop_val)
-            
-            # Initialize data collection variables
-            self.is_collecting = True
-            self.last_read_index = 0
-            self.buffer_name = keithley.buffer_name()
-            self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
-            
-            
-            # Continuous data collection loop
-            # while self.is_collecting:
-            # try:
-            # Get current number of readings in buffer
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                executor.submit(keithley.source.sweep_start())
-            
-            current_readings: int = self.buffer.number_of_readings() # type: ignore
-            print(f"current readings: {current_readings}")
-            
-            # if not current_readings:
-            #     time.sleep(50e-3)
-            #     continue
-            
-            if current_readings > self.last_read_index:
-                # Read new data from buffer
-                start_idx = self.last_read_index + 1
-                end_idx: int = keithley.npts()
+        # self.instrument.reset()
+        keithley = self.instrument
 
-                print(f"start: {start_idx}, stop: {end_idx}")
+        self.buffer_name = keithley.buffer_name()
+        self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
+        keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
+        keithley.sense.range(1e-5)
+        keithley.sense.four_wire_measurement(False)
+        keithley.source.function(self.parameter)
+        keithley.source.range(2)
+        keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
+            
+        # Initialize data collection variables
+        self.is_collecting = True
+        self.last_read_index = 0
+        
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            print("started")
+            executor.submit(keithley.source.sweep_start())
+            print("stopped")
+            
+        end_idx: int = keithley.npts()
+        print(f"start: {0}, stop: {end_idx}")
+            
+        while self.is_collecting:
+            try:
+                current_readings: int = self.buffer.number_of_readings() # type: ignore
+                print(f"current readings: {current_readings}")
                 
-                # Get the raw measurement data
-                raw_data = self.buffer.get_data(1, end_idx, readings_only=True)
-
-                print(raw_data)
-
-                source_values = keithley._calculate_source_values(start_idx, end_idx)
-                
-                # Save each new data point
-                new_points_count = 0
-                for (source_val, meas_val) in zip(source_values, raw_data):
-                    param_value_pair = [
-                        (keithley.source.sweep_axis, source_val),
-                        (keithley.sense.sweep, meas_val)
-                    ]
-                    self.datasaver.add_result(self.table_name, param_value_pair)
-                    new_points_count += 1
+                if current_readings > self.last_read_index:
+                    # Read new data from buffer
+                    start_idx = self.last_read_index + 1
                     
-                    # Optional: Update live plot here
-                    # plotter.update_plot(source_val, meas_val)
-                
-                self.last_read_index = current_readings
-                print(f"Saved {new_points_count} new data points")
-                
-                # # Check if sweep is complete
-                # if current_readings >= keithley.npts():
-                #     print("Sweep completed - all data points collected")
-                #     self.is_collecting = False
-                #     break
-                        
-            # except Exception as e:
-            #     print(f"Error during data collection: {e}")
-            #     self.is_collecting = False
-            #     break
-                
-            time.sleep(50e-3)
+                    raw_data = self.buffer.get_data(1, current_readings, readings_only=True)
+                    print(raw_data)
+
+        #     source_values = keithley._calculate_source_values(start_idx, end_idx)
             
-            # Clear the trace so we can be assured that a subsequent measurement
-            # will not be contaminated with data from this run
-            self.buffer.clear_buffer()
-            print("Data collection finished and buffer cleared")
+        #     # Save each new data point
+        #     new_points_count = 0
+        #     for (source_val, meas_val) in zip(source_values, raw_data):
+        #         param_value_pair = [
+        #             (keithley.source.sweep_axis, source_val),
+        #             (keithley.sense.sweep, meas_val)
+        #         ]
+        #         self.datasaver.add_result(self.table_name, param_value_pair)
+        #         new_points_count += 1
+                
+        #         # Optional: Update live plot here
+        #         # plotter.update_plot(source_val, meas_val)
+            
+        #     self.last_read_index = current_readings
+        #     print(f"Saved {new_points_count} new data points")
+                
+                # Check if sweep is complete
+                if current_readings >= keithley.npts():
+                    print("Sweep completed - all data points collected")
+                    self.is_collecting = False
+                    break
+                        
+            except Exception as e:
+                print(f"Error during data collection: {e}")
+                self.is_collecting = False
+                break
+                
+        # time.sleep(50e-3)
+            
+        #     # Clear the trace so we can be assured that a subsequent measurement
+        #     # will not be contaminated with data from this run
+        # self.buffer.clear_buffer()
+        # print("Data collection finished and buffer cleared")
