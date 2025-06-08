@@ -82,9 +82,9 @@ class SweepCreatorItem(Collapsible):
         keithley_widgets = [
             Select(options=[("Voltage", "voltage"), ("Current", "current")], 
                    classes="inline-select", id="parameter-field"),
-            Input(placeholder="Start", type="number", classes="inline", id="start-field"),
-            Input(placeholder="Stop", type="number", classes="inline", id="stop-field"),
-            Input(placeholder="Step", type="number", classes="inline", id="step-field")
+            Input(placeholder="Start", value="1", type="number", classes="inline", id="start-field"),
+            Input(placeholder="Stop", value="0", type="number", classes="inline", id="stop-field"),
+            Input(placeholder="Step", value="100", type="number", classes="inline", id="step-field")
         ]
         await self.clear_and_setup_widgets(keithley_widgets)
 

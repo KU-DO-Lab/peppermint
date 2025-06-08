@@ -95,14 +95,16 @@ class Sweep1D:
         keithley.source.range(2)
         keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
 
-        print("test")
-        print(dir(keithley.submodules))
-        print(keithley.submodules)
-        print(dir(keithley.submodules["_sense_current"]))
-        param = cast(
-            Parameter, keithley.submodules["_sense_current"].current
-        )
-        # print(keithley.submodules["_sense_current"])
+        # print(dir(keithley.submodules))
+        # print(keithley.submodules)
+        # print(dir(keithley.submodules["_sense_current"]))
+
+        if self.parameter == "voltage":
+            sense_param = cast(Parameter, keithley.submodules["_sense_current"].current)
+            source_param = cast(Parameter, keithley.submodules["_source_voltage"].voltage)
+        else:
+            sense_param = cast(Parameter, keithley.submodules["_sense_voltage"].voltage)
+            source_param = cast(Parameter, keithley.submodules["_source_current"].current)
 
         try:
             cmd_args = keithley.source._sweep_arguments.copy()
@@ -120,63 +122,24 @@ class Sweep1D:
         except Exception as e:
             print(f"Error initiating sweep: {e}")
 
-        time.sleep(1)
-        # end_idx = keithley.actual_end()
-        end_idx = keithley.npts()
-        d: list[float] | None = self.buffer.get_data(1, end_idx) # type: ignore
-        print(f"end: {end_idx}")
+        if not self.step_val:
+            return
 
-        if d:
-            data = list(zip([param for _ in d], d))
-            print(data)
-            # self.datasaver.add_result(self.table_name, ))
+        time.sleep(0.2)
+        while cast(int, self.buffer.number_of_readings()) < self.step_val:
+            print(self.buffer.number_of_readings())
+            data_block = self.buffer.get_data(1, self.buffer.number_of_readings()) # type: ignore
+            print(data_block)
+            # buffer_contents: list[float] | None = self.buffer.get_data(1, end_idx) # type: ignore
+            # print(f"end: {end_idx}")
 
-        # def initiate_sweep():
-        #         print("Sweep initiated.")
-        #
-        #         # Don't wait here - let it run asynchronously
-        #
-        #
-        # def poll_keithley_data():
-        #     time.sleep(0.2)
-        #     for i in range(1, 5):
-        #         try:
-        #             time.sleep(0.1)
-        #             print(keithley.ask(":SOURce1:SWEep:COUNt?"))
-        #             # end_idx = keithley.npts()
-        #             # raw_data = self.buffer.buffer_elements
-        #             # # raw_data = self.buffer.get_data(1, end_idx, readings_only=True)
-        #             # print(f"[Poll {i}] {raw_data}")
-        #         except Exception as e:
-        #             print(f"[Poll {i}] Error in Keithley 2450 sweep: {e}")
+            if data_block:
+                # source_data = list(zip([source_param for _ in d], 0.0))
+                sense_data = list(zip([sense_param for _ in data_block], data_block)) 
+                print(sense_data)
+                # self.datasaver.add_result(self.table_name, sense_data) # note: needs fixing to pass many points at once.
 
-        # with ThreadPoolExecutor(max_workers=2) as executor:
-        #     sweep_future = executor.submit(initiate_sweep)
-        #     poll_future = executor.submit(poll_keithley_data)
-        #     sweep_future.result()
-        #     poll_future.result()
-        
-        # Initialize tracking - no buffer clearing
-        # self.is_collecting = True
-        
-        # with ThreadPoolExecutor(max_workers=2) as executor:
-        #     future_sweep = executor.submit(keithley.source.sweep_start)
-        #
-        #     # Brief delay to let sweep initialize and start populating buffer
-        #     time.sleep(0.1)
-        #     future_reader = executor.submit(self._watch_buffer)
-        #
-        #     # Wait for sweep to complete
-        #     try:
-        #         future_sweep.result()
-        #     except Exception as e:
-        #         print(f"Sweep error: {e}")
-        #     finally:
-        #         # Signal data collection to stop
-        #         self.is_collecting = False
-        #
-        #     # Wait for reader to finish
-        #     try:
-        #         future_reader.result(timeout=2)
-        #     except Exception as e:
-        #         print(f"Reader cleanup error: {e}")
+            time.sleep(0.2)
+
+        data_block = self.buffer.get_data(1, self.buffer.number_of_readings()) # type: ignore
+        print(data_block)
