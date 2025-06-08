@@ -9,6 +9,7 @@ from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListVi
 
 from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
+from liveplotter import LivePlotter
 from util import safe_query_value
 from sweep1d import Sweep1D
 from actionsequence import ActionSequence
@@ -36,7 +37,7 @@ class SweepSequenceItem(ListItem):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Static(f"Sweep1D(name={self.sweep.instrument.name}, param={self.sweep.parameter}, start={self.sweep.start_val}, stop={self.sweep.stop_val}, step={self.sweep.step_val})"),
+            Static(f"Sweep1D(name={self.sweep._instrument.name}, param={self.sweep._parameter}, start={self.sweep._start_val}, stop={self.sweep._stop_val}, step={self.sweep._step_val})"),
             classes="short-listitem"
         )
 
@@ -82,9 +83,9 @@ class SweepCreatorItem(Collapsible):
         keithley_widgets = [
             Select(options=[("Voltage", "voltage"), ("Current", "current")], 
                    classes="inline-select", id="parameter-field"),
-            Input(placeholder="Start", value="1", type="number", classes="inline", id="start-field"),
-            Input(placeholder="Stop", value="0", type="number", classes="inline", id="stop-field"),
-            Input(placeholder="Step", value="100", type="number", classes="inline", id="step-field")
+            Input(placeholder="Start", type="number", classes="inline", id="start-field"),
+            Input(placeholder="Stop", type="number", classes="inline", id="stop-field"),
+            Input(placeholder="# Steps", type="number", classes="inline", id="step-field")
         ]
         await self.clear_and_setup_widgets(keithley_widgets)
 
@@ -144,9 +145,7 @@ class ElectronicMeasurementsScreen(Screen):
         self.experiments = {}
         self.measurements: Dict[str, Measurement] = {}
         date = datetime.datetime.now().strftime('%d.%b.%Y')
-        # self.table_name: str | None = None
-        self.table_name: str | None = self.app.state.datasaver.register_table(f"Measurement Test: {date}")
-
+        self.table_name: str = self.app.state.datasaver.register_table(f"Measurement Test: {date}")
 
     def compose(self) -> ComposeResult:
         self.sweeps_configurator = ListView(classes="outlined-container-fill-horizontal", id="sweep-info")
@@ -226,7 +225,8 @@ class ElectronicMeasurementsScreen(Screen):
                 # only implemented sweep1D atm, will upgrade to a generic later
                 match instrument:
                     case Keithley2450():
-                        sweep: Sweep1D = Sweep1D(datasaver=self.app.state.datasaver, table_name=self.table_name, instrument=instrument, parameter=parameter, start=float(start), stop=float(stop), step=float(step))
+                        sweep: Sweep1D = Sweep1D(datasaver=self.app.state.datasaver, table_name=self.table_name, instrument=instrument, 
+                                                 parameter=parameter, start=float(start), stop=float(stop), step=float(step))
                     case CryomagneticsModel4G():
                         sweep: Sweep1D = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
 

@@ -17,7 +17,7 @@ class ActionSequence:
 
     def start(self) -> None:
         if self.executor == None:
-            self.executor =  concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
     def run(self) -> None:
         """Set up the sequence and run.

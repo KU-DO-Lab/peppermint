@@ -11,6 +11,7 @@ from datasaver import DataSaver
 from drivers.Keithley_2450 import Keithley2450, Keithley2450Buffer, Keithley2450Source
 import threading
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
+from liveplotter import LivePlotter
 from util import run_concurrent
 
 
@@ -21,19 +22,15 @@ class Sweep1D:
                  parameter: Optional[float | None] = None, start: Optional[float | None] = None, stop: Optional[float | None] = None,
                  step: Optional[float | None] = None, rate: Optional[float | None] = None) -> None:
 
-        self.instrument = instrument
-        self.parameter = parameter 
-        self.start_val = start
-        self.stop_val = stop 
-        self.step_val = step
-        self.rate_val = rate
-        self.done_signal = threading.Event
-        self.datasaver = datasaver
-        self.table_name = table_name
-        self.last_read_index = 0
-        self.is_collecting = False
-        self.reader_ready = threading.Event()
-
+        self._instrument = instrument
+        self._parameter = parameter 
+        self._start_val = start
+        self._stop_val = stop 
+        self._step_val = step
+        self._rate_val = rate
+        self._datasaver = datasaver
+        self._table_name = table_name
+        self._plotter = None 
 
     def start(self) -> None:
         """Handler for a sweep based on the class construction."""
@@ -42,7 +39,7 @@ class Sweep1D:
             CryomagneticsModel4G: self._start_cryomagneticsm4g_sweep,
         }
 
-        handler = handlers.get(type(self.instrument)) # type: ignore
+        handler = handlers.get(type(self._instrument)) # type: ignore
         if handler:
             handler()
 
@@ -53,40 +50,54 @@ class Sweep1D:
         Sweeps are accomplished by setting the first end of the sweep, ramping there, then repeating
         for the tail end of the sweep.
         """
-        self.instrument.reset()
-        self.instrument.operating_mode(True) # remote mode
+        self._instrument.reset()
+        self._instrument.operating_mode(True) # remote mode
 
     @run_concurrent
     def _start_keithley2450_sweep(self) -> None:
-        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection.
+        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection and plotting.
 
-        Does two things: 
-        (1) initializes a sweep on the instrument in a non-blocking manner (necessary but may be dangerous, as no *WAI is used so that we may read).
-        (2) reads the buffer at a polling rate (0.2 sec) and appends this to a datasaver table.
+        Does three things: 
+        (1) initializes/starts a plotter for the sweep
+        (2) initializes a sweep on the instrument in a non-blocking manner (necessary but may be dangerous, as no *WAI is used so that we may read).
+        (3) reads the buffer at a polling rate (0.2 sec) and appends this to a datasaver table.
 
         todo:
-            sweep setup may include redundant steps.
+            1. dynamically set sense/source range based on the input.
+            2. sweep setup may include redundant steps.
         """
 
-        keithley = cast(Keithley2450, self.instrument) 
+        keithley = cast(Keithley2450, self._instrument) 
         self.buffer_name = keithley.buffer_name()
         self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
         
         # Setup instrument
-        keithley.sense.function("current" if self.parameter == "voltage" else "voltage")
-        keithley.sense.range(1e-5)
+        keithley.sense.function("current" if self._parameter == "voltage" else "voltage")
+        keithley.sense.range(1e-5 if self._parameter == "voltage" else 2)
         keithley.sense.four_wire_measurement(False)
-        keithley.source.function(self.parameter)
-        keithley.source.range(2)
-        keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
+        keithley.source.function(self._parameter)
+        keithley.source.range(2 if self._parameter == "voltage" else 1e-5)
+        keithley.source.sweep_setup(self._start_val, self._stop_val, self._step_val)
 
         # declare the sense param and source param as their actual objects
-        if self.parameter == "voltage":
+        if self._parameter == "voltage":
             sense_param = cast(Parameter, keithley.submodules["_sense_current"].current)
             source_param = cast(Parameter, keithley.submodules["_source_voltage"].voltage)
         else:
             sense_param = cast(Parameter, keithley.submodules["_sense_voltage"].voltage)
             source_param = cast(Parameter, keithley.submodules["_source_current"].current)
+
+        # overwrite the plotter and start it
+        self._plotter = LivePlotter(
+            self._datasaver,
+            self._table_name,
+            title = "Temperature Monitor",
+            xlabel = f"{source_param.full_name}",
+            ylabel = f"{sense_param.full_name}",
+            xaxis_key = f"{source_param.full_name}",
+        )
+        
+        self._plotter.start()
 
         try:
             cmd_args = keithley.source._sweep_arguments.copy()
@@ -104,11 +115,11 @@ class Sweep1D:
         except Exception as e:
             print(f"Error initiating sweep: {e}")
 
-        if not self.step_val:
+        if not self._step_val:
             return
 
         previous_buffer_size = 0 # compare with reading to subtract off data that has been logged already
-        while cast(int, self.buffer.number_of_readings()) < self.step_val:
+        while cast(int, self.buffer.number_of_readings()) < self._step_val:
             time.sleep(0.2) # polling rate
 
             data_block: list[float] = self.buffer.get_data(1, self.buffer.number_of_readings()) # type: ignore
@@ -125,4 +136,6 @@ class Sweep1D:
 
                 # bundle both up and append to the table
                 for _, (source_tup, sense_tup) in enumerate(zip(source_data, sense_data)):
-                    self.datasaver.add_result(self.table_name, [source_tup, sense_tup])
+                    self._datasaver.add_result(self._table_name, [source_tup, sense_tup])
+
+        self._plotter.stop()
