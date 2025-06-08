@@ -1,3 +1,4 @@
+import sys
 import atexit
 import pyvisa
 import argparse
@@ -46,7 +47,8 @@ class Peppermint(App):
         super().__init__(*args, **kwargs)
         self.simulated_mode: Optional[str | None] = simulated_mode
         self.state: SharedState = SharedState()
-        self.state.detected_instruments = [ instr for instr in pyvisa.ResourceManager("@py").list_resources() ]
+        rm = pyvisa.ResourceManager() if sys.platform.startswith("win") else pyvisa.ResourceManager("@py")
+        self.state.detected_instruments = [ instr for instr in rm.list_resources() ]
         self.state.connected_instruments = []
         self.state.write_parameters = []
         self.state.read_parameters = []
