@@ -12,3 +12,5 @@
 8. `sweep1d.py`: primitive interface which takes an instrument and dispatches a sweep. Uses multiple dispatch pattern to supply unique functions which can be called in the same way but implement sweep for each instrument separately. **Will be deprecated in the future** in favor of a generic `Sweep` class which may be configured to sweep inner and outer parameters.
 9. `themes.py`: additional color schemes which may be used by the user.
 10. `utils.py`: broadly defined, general-use functions and classes which are not large enough or do not fit well into their own file. 
+11. `loggingmixin.py`: mixin (class that contains methods for use by other classes without having to be the parent class of those other classes) related to logging. Specifically, responsible for managing the lifetime of logging. For example, consider we want to measure the temperature of the cryostat while sweeping. If we set it and forget it, we will not be continuously logging. Instead, we need something outside the Setter class which knows how often to, and when to start/stop measuring some value(s).
+12. `./setter.py`:

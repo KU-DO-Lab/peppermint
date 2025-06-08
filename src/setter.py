@@ -1,17 +1,22 @@
-from qcodes.instrument import VisaInstrument
+from typing import Any
 from qcodes.parameters import Parameter
 
+from datasaver import DataSaver
 
 class Setter():
-    def __init__(self, instrument: VisaInstrument, parameter: Parameter) -> None:
-        self.instrument: VisaInstrument = instrument
-        self.parameter: Parameter = parameter
+    """Set a parameter programatically, and log/plot it continuously.
 
-    def start(self):
-        pass
+    The lifetime of a set parameter may be the entire duration of the measurement, necessitating
+    logging outside the lifetime of the start function.
+    """
+    def __init__(self, parameter: Parameter, table_name: str, datasaver: DataSaver) -> None:
+        self._parameter: Parameter = parameter
+        self._datasaver: DataSaver = datasaver
+        self._table_name: str = table_name
 
-    def parse_value(self):
-        pass
+    def start(self, value: Any) -> None:
+        """Call to set the value, start the plotter, and record value"""
+        return self._parameter.get()
 
-    def set_value(self):
+    def set_value(self) -> None: 
         pass
