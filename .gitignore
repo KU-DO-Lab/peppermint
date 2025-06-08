@@ -176,8 +176,6 @@ devenv.local.nix
 # devenv
 .devenv*
 devenv.local.nix
-devenv.*
-devenv.nix 
 devenv.yaml 
 devenv.lock
 .direnv

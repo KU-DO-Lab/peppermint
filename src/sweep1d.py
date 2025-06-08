@@ -102,7 +102,7 @@ class Sweep1D:
 
 # Continuous buffer reading during sweep - bypassing blocking sweep_start()
     @run_concurrent  
-    def _start_keithley2450_sweep_continuous(self):
+    def _start_keithley2450_sweep(self):
         """Continuous buffer reading by using low-level SCPI commands instead of blocking sweep_start()."""
         keithley = self.instrument
         self.buffer_name = keithley.buffer_name()
@@ -137,49 +137,60 @@ class Sweep1D:
         all_data = []
         start_time = time.time()
         timeout = 60  # 60 second timeout
-        
-        while True:
-            try:
-                # Check if sweep is still running
-                operation_complete = keithley.ask("*OPC?").strip() == "1"
-                
-                # Read current buffer size
-                current_buffer_size = int(keithley.ask(f":TRACe:ACTual? '{self.buffer_name}'"))
-                
-                # If we have new data, read it
-                if current_buffer_size > last_buffer_size:
-                    # Read only the new points
-                    start_idx = last_buffer_size + 1
-                    end_idx = current_buffer_size
-                    
-                    if start_idx <= end_idx:
-                        new_data = self.buffer.get_data(start_idx, end_idx, readings_only=True)
 
-                        if not new_data: 
-                            continue
-                        
-                        for i, point in enumerate(new_data):
-                            point_number = last_buffer_size + i + 1
-                            print(f"Point {point_number}/{expected_points}: {point}")
-                            all_data.append(point)
-                    
-                    last_buffer_size = current_buffer_size
-                
-                # Check exit conditions
-                if operation_complete and current_buffer_size >= expected_points:
-                    print("Sweep completed successfully")
-                    break
-                    
-                if time.time() - start_time > timeout:
-                    print("Sweep timeout - stopping")
-                    keithley.write(":ABORt")
-                    break
-                    
-                time.sleep(0.01)  # Small delay between polls
-                
-            except Exception as e:
-                print(f"Buffer monitoring error: {e}")
-                time.sleep(0.05)
+        try: 
+            time.sleep(0.05)
+            operation_complete = keithley.ask("*OPC?").strip() == "1"
+            print(f"OP: {operation_complete}")
+            new_data = self.buffer.get_data(start_idx, end_idx, readings_only=True)
+            print(new_data)
+        except Exception as e:
+            print(f"Buffer monitoring error: {e}")
+            time.sleep(0.05)
+
         
-        print(f"Sweep complete. Total points collected: {len(all_data)}")
-        return all_data
+        # while True:
+        #     try:
+        #         # Check if sweep is still running
+        #         operation_complete = keithley.ask("*OPC?").strip() == "1"
+        #
+        #         # Read current buffer size
+        #         current_buffer_size = int(keithley.ask(f":TRACe:ACTual? '{self.buffer_name}'"))
+        #
+        #         # If we have new data, read it
+        #         if current_buffer_size > last_buffer_size:
+        #             # Read only the new points
+        #             start_idx = last_buffer_size + 1
+        #             end_idx = current_buffer_size
+        #
+        #             if start_idx <= end_idx:
+        #                 new_data = self.buffer.get_data(start_idx, end_idx, readings_only=True)
+        #
+        #                 if not new_data: 
+        #                     continue
+        #
+        #                 for i, point in enumerate(new_data):
+        #                     point_number = last_buffer_size + i + 1
+        #                     print(f"Point {point_number}/{expected_points}: {point}")
+        #                     all_data.append(point)
+        #
+        #             last_buffer_size = current_buffer_size
+        #
+        #         # Check exit conditions
+        #         if operation_complete and current_buffer_size >= expected_points:
+        #             print("Sweep completed successfully")
+        #             break
+        #
+        #         if time.time() - start_time > timeout:
+        #             print("Sweep timeout - stopping")
+        #             keithley.write(":ABORt")
+        #             break
+        #
+        #         time.sleep(0.01)  # Small delay between polls
+        #
+        #     except Exception as e:
+        #         print(f"Buffer monitoring error: {e}")
+        #         time.sleep(0.05)
+        #
+        # print(f"Sweep complete. Total points collected: {len(all_data)}")
+        # return all_data

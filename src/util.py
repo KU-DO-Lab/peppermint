@@ -82,7 +82,7 @@ def auto_connect_instrument(address: str, name=None, args=[], kwargs={}):
     elif name == "simulated_cryomagnetics4g":
         return CryomagneticsModel4G("simulated_cryomagnetics4g", address="GPIB::1::INSTR", pyvisa_sim_file="cryo4g.yaml", max_current_limits={0: (0.0, 0.0)}, coil_constant=10.0,)
 
-    rm = pyvisa.ResourceManager()
+    rm = pyvisa.ResourceManager("@py")
     inst = rm.open_resource(address)
     IDN = ""
     
