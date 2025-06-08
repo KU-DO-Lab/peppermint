@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 import re
 import sqlite3
-from typing import Any, Generator, List, Sequence
+from typing import Any, Generator, Iterable, List, Sequence
 import threading
 from qcodes.parameters import Parameter
 from typing import List
@@ -143,29 +143,33 @@ class DataSaver:
             conn.execute(query)
             conn.commit()
 
-    def add_result(self, table_name: str, param_value_pair: list[tuple[Parameter, float]]) -> None:
+    def add_result(self, table_name: str, param_value_pair: tuple[Parameter, float] | list[tuple[Parameter, float]]) -> None:
         """Add a set of values to a table. Automatically creates columns for the parameters if they do not exist."""
 
         if not param_value_pair:
             return
-        
+
         self._ensure_table_exists(table_name)
-        
+
+        # Normalize input to a list of tuples
+        if isinstance(param_value_pair, tuple):
+            param_value_pair = [param_value_pair]  # Wrap single tuple in a list
+
         # Ensure all columns exist
         for parameter, _ in param_value_pair:
             self._ensure_column_exists(table_name, f"{parameter.full_name}", "NUMERIC")
-        
-        # Insert all values in one row
-        column_names = [f'"{param.full_name}"' for param, _ in param_value_pair]  # Fixed: use underscore
+
+        # Prepare and execute insert
+        column_names = [f'"{param.full_name}"' for param, _ in param_value_pair]
         values = [value for _, value in param_value_pair]
         
         columns_str = ", ".join(column_names)
-        placeholders = ", ".join(["?" for _ in values]) # Use placeholders to let SQLite insert the values below
+        placeholders = ", ".join(["?" for _ in values])
         
         query = f'INSERT INTO "{table_name}" ({columns_str}) VALUES ({placeholders});'
 
         with self.ds_cursor() as cursor:
-            cursor.execute(query, values) # Pass the query and values now
+            cursor.execute(query, values)
 
         with self.ds_connection() as conn:
             conn.commit()

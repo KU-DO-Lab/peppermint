@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import time
 import concurrent
+from qcodes.dataset import new_data_set
 from qcodes.instrument import VisaInstrument
 from typing import Optional, cast
 import threading
@@ -55,35 +56,19 @@ class Sweep1D:
         self.instrument.reset()
         self.instrument.operating_mode(True) # remote mode
 
-    # def _watch_buffer(self) -> None:
-    #     """Continuously watch buffer for data changes."""
-    #     last_seen_data = None
-    #
-    #     while self.is_collecting:
-    #         try:
-    #             # Always try to read the buffer - let the instrument handle empty states
-    #             raw_data = self.buffer.get_data(1, self.step_val, readings_only=True)
-    #
-    #             if not raw_data: 
-    #                 continue
-    #
-    #             # Only print when data actually changes
-    #             if raw_data != last_seen_data:
-    #                 print(f"Buffer update: {raw_data}")
-    #                 last_seen_data = raw_data.copy() if hasattr(raw_data, 'copy') else list(raw_data)
-    #
-    #             time.sleep(0.01)
-    #
-    #         except Exception as e:
-    #             # Don't break on exceptions - just log and continue
-    #             print(f"Buffer read error: {e}")
-    #             time.sleep(0.05)  # Longer delay after errors
-
     @run_concurrent
     def _start_keithley2450_sweep(self) -> None:
-        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection."""
+        """Dispatch for the Keithley 2450 hardware-driven sweep with continuous data collection.
 
-        keithley: Keithley2450 = self.instrument
+        Does two things: 
+        (1) initializes a sweep on the instrument in a non-blocking manner (necessary but may be dangerous, as no *WAI is used so that we may read).
+        (2) reads the buffer at a polling rate (0.2 sec) and appends this to a datasaver table.
+
+        todo:
+            sweep setup may include redundant steps.
+        """
+
+        keithley = cast(Keithley2450, self.instrument) 
         self.buffer_name = keithley.buffer_name()
         self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
         
@@ -95,10 +80,7 @@ class Sweep1D:
         keithley.source.range(2)
         keithley.source.sweep_setup(self.start_val, self.stop_val, self.step_val)
 
-        # print(dir(keithley.submodules))
-        # print(keithley.submodules)
-        # print(dir(keithley.submodules["_sense_current"]))
-
+        # declare the sense param and source param as their actual objects
         if self.parameter == "voltage":
             sense_param = cast(Parameter, keithley.submodules["_sense_current"].current)
             source_param = cast(Parameter, keithley.submodules["_source_voltage"].voltage)
@@ -125,21 +107,22 @@ class Sweep1D:
         if not self.step_val:
             return
 
-        time.sleep(0.2)
+        previous_buffer_size = 0 # compare with reading to subtract off data that has been logged already
         while cast(int, self.buffer.number_of_readings()) < self.step_val:
-            print(self.buffer.number_of_readings())
-            data_block = self.buffer.get_data(1, self.buffer.number_of_readings()) # type: ignore
-            print(data_block)
-            # buffer_contents: list[float] | None = self.buffer.get_data(1, end_idx) # type: ignore
-            # print(f"end: {end_idx}")
+            time.sleep(0.2) # polling rate
+
+            data_block: list[float] = self.buffer.get_data(1, self.buffer.number_of_readings()) # type: ignore
+            new_sense_data: list[float] = data_block[previous_buffer_size:] # trim off old data
+
+            axis: list[float] = keithley.source.sweep_axis() # just a linspace between start stop with steps.
+            new_axis_data: list[float] = axis[previous_buffer_size:] # trim it down to append with sense_data
+
+            previous_buffer_size: int = len(new_sense_data) # update length
 
             if data_block:
-                # source_data = list(zip([source_param for _ in d], 0.0))
-                sense_data = list(zip([sense_param for _ in data_block], data_block)) 
-                print(sense_data)
-                # self.datasaver.add_result(self.table_name, sense_data) # note: needs fixing to pass many points at once.
+                source_data: list[tuple[Parameter, float]] = list(zip([source_param for _ in new_axis_data], new_axis_data))
+                sense_data: list[tuple[Parameter, float]] = list(zip([sense_param for _ in new_sense_data], new_sense_data)) 
 
-            time.sleep(0.2)
-
-        data_block = self.buffer.get_data(1, self.buffer.number_of_readings()) # type: ignore
-        print(data_block)
+                # bundle both up and append to the table
+                for _, (source_tup, sense_tup) in enumerate(zip(source_data, sense_data)):
+                    self.datasaver.add_result(self.table_name, [source_tup, sense_tup])
