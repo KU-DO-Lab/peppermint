@@ -156,6 +156,18 @@ class Keithley2450Buffer(InstrumentChannel):
         fetch_elements = [self.buffer_elements[element] for element in self.elements()]
         return self.ask(f":FETCh? '{self.buffer_name}', {','.join(fetch_elements)}")
 
+    def actual_end(self) -> int:
+        """
+        This command returns the actual end index of the reading buffer.
+
+        Returns:
+            The ending index in the reading buffer
+        """
+        end = self.ask(
+            f":TRACe:ACTual:END?"
+        )
+        return int(end) 
+
     def get_data(
         self, start_idx: int, end_idx: int, readings_only: bool = False
     ) -> list[Any]:

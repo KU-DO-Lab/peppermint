@@ -80,6 +80,7 @@ class ParametersScreen(Screen):
                         self.available_parameters.append(ListItem(Static(p.full_name, classes="write")))
                         self.action_set_parameter_write(provided_param=p.full_name)
                     else:
+                        print(p)
                         self.available_parameters.append(ListItem(Static(p.full_name)))
 
     def action_set_parameter_read(self, provided_param: Optional[str]=None) -> None:
