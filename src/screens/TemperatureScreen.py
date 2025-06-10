@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional
 
 from drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from util import *
-# from simpleliveplotter import SimpleLivePlotter
 from liveplotter import LivePlotter
 
 import numpy as np
@@ -35,10 +34,10 @@ class TemperatureMultiParameter(MultiParameter):
 class TemperatureScreen(Screen):
     """The screen containing information related to the temperature controllers."""
 
-    BINDINGS = [
-        ("f1", "initialize_plot", "Open Plot"),
-        ("f2", "stop_plot", "Stop Plot"),
-    ] 
+    # BINDINGS = [
+    #     ("f1", "initialize_plot", "Open Plot"),
+    #     ("f2", "stop_plot", "Stop Plot"),
+    # ] 
 
     def __init__(self):
         super().__init__()
@@ -76,6 +75,8 @@ class TemperatureScreen(Screen):
             xlabel="Timestamp", 
             ylabel="Temperature (k)",
         )
+        
+        self.app.state.plot_manager.add_plotter(self.plotter)
             
     def compose(self) -> ComposeResult:
         """Define all widgets for this screen."""
@@ -535,8 +536,6 @@ class TemperatureScreen(Screen):
         if handler:
             handler(channel, str(event.pressed.label))
             
-        # channel.print_readable_snapshot()
-
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if not event.input.id:
             return
@@ -556,28 +555,9 @@ class TemperatureScreen(Screen):
         if handler:
             handler()
 
-        # channel.print_readable_snapshot()
-
     def start_temperature_polling(self) -> None:
         self.update_timer = self.set_interval(self.polling_interval, self.poll_temperature_controller)
 
-    def stop_temperature_polling(self) -> None:
-        """Check if there is a update_timer and then stop it. Meant to be called when the screen is closed."""
-        if self.update_timer:
-            self.update_timer.stop()
-        self.plotter.stop()
-
-    def cleanup_all(self) -> None:
-        self.stop_temperature_polling()
-        self.plotter.stop()
-
-    def action_initialize_plot(self) -> None:
-        """Initialize and display a Matplotlib plot for channels A, B, C, and D."""
-        self.plotter.start()
-
-    def action_stop_monitoring(self) -> None:
-        """Stop the plot"""
-        if self.plotter.running:
-            self.plotter.stop()
-        else:
-            self.notify("No plotter running!")
+    # def action_initialize_plot(self) -> None:
+    #     """Initialize and display a plot for channels A, B, C, and D."""
+    #     self.plotter.start()

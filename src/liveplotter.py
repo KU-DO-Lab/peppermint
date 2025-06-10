@@ -1,9 +1,14 @@
 from datetime import datetime
 import os
 import threading
-from typing import Set
+import time
+from typing import Callable, Set
+import uuid
 import webbrowser
 
+from bokeh.core.property.singletons import Optional
+from bokeh.io import curdoc
+from bokeh.layouts import column
 from bokeh.palettes import Spectral11
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
@@ -13,6 +18,68 @@ from watchdog.observers import Observer
 
 from util import DatabaseChangeHandler
 
+import threading
+import webbrowser
+
+from bokeh.application.application import Application
+from bokeh.application.handlers.function import FunctionHandler
+from bokeh.document import Document
+from bokeh.models import Button, Div, GridBox, ScrollBox
+from bokeh.models.layouts import Column
+from bokeh.plotting import figure
+from bokeh.server.server import Server
+
+class LivePlotterApp():
+    def __init__(self, port=5006) -> None:
+        self._server: Server | None = None
+        self.port: int = port
+        self._doc: Document | None = None
+        self.running = False
+        self._browser_opened = False
+
+    def create_app(self, doc):
+        self._doc = doc
+
+        # A Div that shows loaded status
+        div = Div(text="<b>📡 Document loaded!</b>", width=200, height=30)
+
+        # A Button you can click to test interactivity
+        btn = Button(label="Test button", button_type="success")
+        btn.on_click(lambda: print("Button clicked!"))
+
+        # Add widgets to the document root
+        doc.add_root(column(div, btn))
+
+    def initialize(self):
+        """Open browser and start server in own thread."""
+        if self.running:
+            print("Server is already running")
+            return
+
+        def start():
+            self._server = Server({'/': self.create_app}, port=self.port, allow_websocket_origin=['localhost:5006', '127.0.0.1:5006'])
+            self._server.start()
+            self._server.show('/')
+            self._server.io_loop.start()
+
+        self._thread = threading.Thread(target=start, daemon=True)
+        self._thread.start()
+
+    def attach_figure(self, fig: figure) -> None:
+        if self._doc:
+            def add():
+                try:
+                    self._doc.add_root(fig)
+                except Exception as e:
+                    print(f"Error: {e}")
+
+            self._doc.add_next_tick_callback(add)
+
+    def get_doc(self):
+        try:
+            return curdoc()
+        except RuntimeError:
+            return None
 
 class LivePlotter: 
     """Real-time data plotter implementing multiple display modes.
@@ -34,11 +101,21 @@ class LivePlotter:
     (2) Textual (planned): ASCII display for fun and a quick glance
     """
 
-    def __init__( 
-        self, datasaver, table_name: str, max_points: int | None = 2**18, xaxis_key: str = "timestamp",
-        xlabel: str = "x-axis", ylabel: str = "y-axis", title: str = "Title",
-        batch_size: int = 100, update_interval: float = 0.1
-    ):
+    def __init__(
+            self, 
+            datasaver, 
+            table_name: str, 
+            max_points: int | None = 2**18, 
+            xaxis_key: str = "timestamp",
+            xlabel: str = "x-axis", 
+            ylabel: str = "y-axis", 
+            title: str = "Title",
+            batch_size: int = 100, 
+            update_interval: float = 0.1,
+            width: int = 600,
+            height: int = 400
+        ):
+        self._doc: Document | None = None
         self.datasaver = datasaver
         self.title = title 
         self.xlabel = xlabel
@@ -47,29 +124,43 @@ class LivePlotter:
         self.xaxis_key = xaxis_key
         self.batch_size = batch_size
         self.update_interval = update_interval
-        
+        self.max_points = max_points
+        self.width = width
+        self.height = height
+
+        # Generate unique ID for this plotter instance
+        self.plotter_id = str(uuid.uuid4())[:8]
+
         # Performance optimization state
-        self.last_processed_id = 0  # Track last processed row ID
-        self.known_columns: Set[str] = set()  # Cache column names
-        self.traces_initialized = False  # Track if traces are set up
-        self.pending_updates = False  # Flag to batch multiple file change events
+        self.last_processed_id = 0
+        self.known_columns: Set[str] = set()
+        self.traces_initialized = False
+        self.pending_updates = False
         self.update_lock = threading.Lock()
-        
-        # 1. Watchdog setup 
+        self.is_active = False
+
+        # Callbacks for external notification
+        self.update_callbacks: list[Callable] = []
+
+        # Bokeh components
+        self.colors = Spectral11[:32]
+        self.source = ColumnDataSource()
+        self.plot: figure | None = None
+
+        # Watchdog setup
         self.observer = Observer()
         self.observer.schedule(
             event_handler=DatabaseChangeHandler(self.datasaver.path, self._mark_for_update), 
             path=os.path.dirname(self.datasaver.path)
         )
-        
-        # 2. Bokeh components
-        self.colors = Spectral11[:32]
-        self.source = ColumnDataSource()
-        
-        # 3. Initialize with existing data and cache columns
+
+        self.update_timer = None
+
+        # Initialize and create the figure
         self._initialize_data_and_schema()
-        
-        # 4. Create plot
+        self._create_figure()
+
+    def _create_figure(self) -> figure:
         self.plot = figure(
             title=self.title,
             x_axis_label=self.xlabel,
@@ -79,14 +170,9 @@ class LivePlotter:
         self.plot.legend.location = "top_left"
         self.plot.legend.click_policy = "hide"
 
-        # 5. Server setup
-        self.server = None
-        self.browser_opened = False
-        self.running = False
-        self._doc = None
-        
-        # 6. Batch update timer
-        self.update_timer = None
+        self._setup_traces()
+
+        return self.plot
 
     def _initialize_data_and_schema(self) -> None:
         """Initialize plot data and cache the table schema."""
@@ -95,11 +181,11 @@ class LivePlotter:
         if table_contents:
             for key, value in table_contents.items():
                 self.source.data[key] = value
-            
+
             # Set last processed ID to the highest existing ID
             if 'id' in table_contents and table_contents['id']:
                 self.last_processed_id = max(table_contents['id'])
-        
+
         # Cache column information
         self._update_column_cache()
 
@@ -107,25 +193,25 @@ class LivePlotter:
         """Update the cached column information. Returns True if schema changed."""
         current_columns = set(self.datasaver.get_columns(self.table_name))
         schema_changed = current_columns != self.known_columns
-        
+
         if schema_changed:
             self.known_columns = current_columns
             self.traces_initialized = False  # Force trace re-initialization
-        
+
         return schema_changed
 
     def _setup_traces(self) -> None:
         """Set up plot traces only when needed (schema changes or first run)."""
         if self.traces_initialized:
             return
-            
-        exceptions = {"id", "timestamp"}
-        
+
+        exceptions = {"id", "timestamp", self.xaxis_key}
+
         # Clear existing traces if this is a re-initialization
         if hasattr(self.plot, 'renderers'):
             # Remove old line renderers
             self.plot.renderers = [r for r in self.plot.renderers if not hasattr(r, 'glyph')]
-        
+
         # Add traces for new columns
         for i, trace in enumerate(self.known_columns):
             if trace in exceptions: 
@@ -139,7 +225,7 @@ class LivePlotter:
                 x=self.xaxis_key, y=trace, source=self.source, 
                 legend_label=trace, line_color=self.colors[i % len(self.colors)]
             )
-        
+
         self.traces_initialized = True
 
     def _mark_for_update(self) -> None:
@@ -166,7 +252,7 @@ class LivePlotter:
             if not timestamp:
                 parsed.append(None)
                 continue
-                
+
             try:
                 # Try the most common format first
                 if len(timestamp) < 20:
@@ -176,120 +262,96 @@ class LivePlotter:
             except ValueError:
                 # Fallback for edge cases
                 parsed.append(None)
-        
+
         return parsed
 
     def update_plot(self) -> None:
-        """Updates plot by streaming latest table values in batches."""
-        if not self.server or not self._doc:
-            return
-        
+        """Queue up a batched update; do all Bokeh work on the app thread."""
         try:
-            # 1. Check for schema changes (only occasionally)
+            # 1. Background work
+            # Check schema, fetch rows, parse timestamps, filter new rows:
             schema_changed = self._update_column_cache()
-            
-            # 2. Get batched data using get_tail_values
-            # Calculate how many rows we need to fetch
-            rows_to_fetch = min(self.batch_size, 1000)  # Cap at reasonable limit
-            
-            # Get recent data
-            all_recent_data = self.datasaver.get_tail_values(self.table_name, rows_to_fetch)
-            
-            if not all_recent_data or not any(all_recent_data.values()):
+            rows_to_fetch = min(self.batch_size, 1000)
+            recent = self.datasaver.get_tail_values(self.table_name, rows_to_fetch)
+            if not recent or not any(recent.values()):
                 return
-            
-            # 3. Filter to only new rows (those with ID > last_processed_id)
-            if 'id' not in all_recent_data:
-                # Fallback: if no ID column, process all data (less efficient)
-                data = all_recent_data
+
+            if 'id' in recent:
+                new_idxs = [i for i, rid in enumerate(recent['id']) if rid > self.last_processed_id]
+                if not new_idxs:
+                    return
+                data = {col: [recent[col][i] for i in new_idxs] for col in recent}
             else:
-                # Filter for new rows only
-                new_indices = [i for i, row_id in enumerate(all_recent_data['id']) 
-                              if row_id > self.last_processed_id]
-                
-                if not new_indices:
-                    return  # No new data
-                
-                # Extract only the new rows
-                data = {}
-                for column in all_recent_data:
-                    data[column] = [all_recent_data[column][i] for i in new_indices]
-            
-            # 4. Batch timestamp parsing
-            if "timestamp" in data:
-                data["timestamp"] = self._parse_timestamps_batch(data["timestamp"])
-            
-            # 5. Update last processed ID
-            if 'id' in data and data['id']:
-                self.last_processed_id = max(data['id'])
-            
-            # 6. Schedule document update
-            def update_doc():
-                try:
-                    # Only setup traces if schema changed
+                data = recent
+
+            if 'timestamp' in data:
+                data['timestamp'] = self._parse_timestamps_batch(data['timestamp'])
+
+            new_last_id = max(data.get('id', [self.last_processed_id]))
+
+            # 2. Schedule the Bokeh updates
+            if self._doc:
+                def _bokeh_update():
+                    # a) If schema changed, re-init traces under lock
                     if schema_changed or not self.traces_initialized:
+                        # update column cache again inside main thread
+                        self._update_column_cache()
                         self._setup_traces()
-                    
-                    # Ensure all keys exist in source
-                    for key in data:
-                        if key not in self.source.data:
-                            self.source.data[key] = []
-                    
-                    # Stream the batched data
+
+                    # b) Update last_processed_id
+                    self.last_processed_id = new_last_id
+
+                    # c) Ensure every key exists in the CDS
+                    for k in data:
+                        if k not in self.source.data:
+                            self.source.data[k] = []
+
+                    # d) Stream the new data
                     self.source.stream(data)
-                    
-                except Exception as e:
-                    print(f"Error updating plot: {e}")
-            
-            # Execute update within Bokeh's document context
-            self.server.io_loop.add_callback(
-                lambda: self._doc.add_next_tick_callback(update_doc)
-            )
-            
+
+                    # e) Fire callbacks
+                    for cb in self.update_callbacks:
+                        try:
+                            cb()
+                        except Exception as e:
+                            print("Error in update callback:", e)
+
+                self._doc.add_next_tick_callback(_bokeh_update)
+
         except Exception as e:
-            print(f"Error in batch update: {e}")
+            print(f"Error in batch update for {self.table_name}: {e}")
 
-    def bkapp(self, doc):
-        """Bokeh server app to run the plot."""
+    def start(self, doc) -> None:
         self._doc = doc
-        doc.add_root(self.plot)
-        doc.title = self.title
-        
-        if not self.running:
-            self.running = True
-            # Setup initial traces
-            self._setup_traces()
-            # Start the watchdog
-            self.observer.start()
+        self.observer.start()
 
-    def start(self) -> None:
-        """Start the Bokeh server and open in browser."""
-        if not self.server:
-            self.server = Server({'/': self.bkapp}, port=5006)
-            self.server.start()
-            
-            if not self.browser_opened:
-                browser_thread = threading.Thread(target=self._open_browser, daemon=True)
-                browser_thread.start()
+    def get_figure(self) -> figure | None:
+        if self.plot:
+            return self.plot
 
-    def _open_browser(self) -> None:
-        """Open the web browser."""
-        webbrowser.open("http://localhost:5006")
-        self.browser_opened = True
+class LivePlotterManager:
+    """Manager class to handle multiple LivePlotter instances with LivePlotterApp."""
 
-    def stop(self) -> None:
-        """Stop the plotter and clean up resources."""
-        self.running = False
-        
-        # Cancel pending timer
-        if self.update_timer:
-            self.update_timer.cancel()
-        
-        # Stop watchdog observer
-        if hasattr(self, 'observer'):
-            self.observer.stop()
-            self.observer.join()
-        
-        # Stop Bokeh server
-        if self.server:
-            self.server.stop()
+    def __init__(self, app: 'LivePlotterApp'):
+        self.app = app
+        self.plotters: dict[str, LivePlotter] = {}
+
+    def add_plotter(self, plotter: LivePlotter) -> None:
+        """Add a LivePlotter to the manager and attach its figure to the app."""
+        plotter_id = plotter.plotter_id
+
+        if plotter_id in self.plotters:
+            print(f"Plotter {plotter_id} already exists")
+            return
+
+        self.plotters[plotter_id] = plotter
+
+        # Attach figure to the app
+        if self.app._doc:
+            fig = plotter.get_figure()
+            if fig:
+                self.app.attach_figure(fig)
+
+        plotter.start(doc=self.app._doc)
+
+        print(f"Added plotter {plotter_id} for table {plotter.table_name}")

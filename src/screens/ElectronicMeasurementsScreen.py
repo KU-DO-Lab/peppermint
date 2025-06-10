@@ -9,7 +9,6 @@ from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListVi
 
 from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
-from liveplotter import LivePlotter
 from util import safe_query_value
 from sweep1d import Sweep1D
 from actionsequence import ActionSequence
@@ -225,10 +224,10 @@ class ElectronicMeasurementsScreen(Screen):
                 # only implemented sweep1D atm, will upgrade to a generic later
                 match instrument:
                     case Keithley2450():
-                        sweep: Sweep1D = Sweep1D(datasaver=self.app.state.datasaver, table_name=self.table_name, instrument=instrument, 
+                        sweep: Sweep1D = Sweep1D(datasaver=self.app.state.datasaver, plot_manager=self.app.state.plot_manager, table_name=self.table_name, instrument=instrument, 
                                                  parameter=parameter, start=float(start), stop=float(stop), step=float(step))
                     case CryomagneticsModel4G():
-                        sweep: Sweep1D = Sweep1D(instrument=instrument, start=float(start), stop=float(stop), rate=float(rate))
+                        sweep: Sweep1D = Sweep1D(instrument=instrument, plot_manager=self.app.state.plot_manager, start=float(start), stop=float(stop), rate=float(rate))
 
                 self.sweeps_sequence.append(SweepSequenceItem(sweep))
         except Exception as e:

@@ -1,11 +1,13 @@
 import sys
 import atexit
+from bokeh.plotting import figure
 import pyvisa
 import argparse
 
 from textual.app import App
 from textual.theme import Theme
 
+from liveplotter import LivePlotterApp, LivePlotterManager
 from util import *
 from datasaver import DataSaver
 from themes import *
@@ -34,7 +36,9 @@ class SharedState:
     write_parameters: reactive[list[Parameter]] = field(default_factory=lambda: reactive(list))
     # database_path: str = ""
     # experiment: Experiment | None = None
+    plot_server: LivePlotterApp | None = None
     datasaver: DataSaver | None = None
+    plot_manager: LivePlotterManager | None = None
     
     def __post_init__(self):
         """Called after dataclass initialization."""
@@ -47,12 +51,20 @@ class Peppermint(App):
         super().__init__(*args, **kwargs)
         self.simulated_mode: Optional[str | None] = simulated_mode
         self.state: SharedState = SharedState()
-        rm = pyvisa.ResourceManager() if sys.platform.startswith("win") else pyvisa.ResourceManager("@py")
+        rm = pyvisa.ResourceManager() if sys.platform.startswith("win") else pyvisa.ResourceManager("@py") # py backend works better on unix
         self.state.detected_instruments = [ instr for instr in rm.list_resources() ]
         self.state.connected_instruments = []
         self.state.write_parameters = []
         self.state.read_parameters = []
         self.state.datasaver = DataSaver("./datasaver.db")
+        self.state.plot_server = LivePlotterApp()
+        self.state.plot_server.initialize()
+
+        p = figure(width=400, height=400)
+        p.line([1, 2, 3, 4, 5], [6, 7, 2, 4, 5], line_width=2)
+
+        self.state.plot_server.attach_figure(p)
+        self.state.plot_manager = LivePlotterManager(self.state.plot_server)
 
     CSS_PATH = "peppermint.css"
 
