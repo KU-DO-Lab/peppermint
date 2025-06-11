@@ -13,7 +13,7 @@ class SplashScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         VERSION = 0.1
 
-        TITLE = """[#4d67ea]
+        TITLE = """[bold][#4d67ea]
     |               ____                                       _       __ 
   .'|'.            / __ \\___  ____  ____  ___  _________ ___  (_)___  / /_
  /.'|\\ \\          / /_/ / _ \\/ __ \\/ __ \\/ _ \\/ ___/ __ `__ \\/ / __ \\/ __/
@@ -24,15 +24,15 @@ class SplashScreen(ModalScreen):
 """
 
         INFO = """[bold]
-[#82cfff]• Check your browswer, a window to show data collection should appear! [/]
-[#42be65]• Press "ESC" to close this dialog! [/]
+• Check your browswer, a window to show data collection should appear!
+   (Note, this may be reopened at any time with "f1")
         """
 
         yield Vertical(
             Center(Label(TITLE)),
-            Container(Label(f"Version: [bold]{VERSION}[/bold]"), id="center-middle"),
             Label(INFO),
-            id="dialog"
+            Container(Label(f"Version: [bold]{VERSION}[/bold] {" "*8} Press 'ESC' to close this dialog."), id="center-middle"),
+            id="splash"
         )
 
 class ManualConnectionDialog(ModalScreen):

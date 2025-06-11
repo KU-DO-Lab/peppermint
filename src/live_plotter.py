@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import os
 import threading
 import time
@@ -7,6 +8,7 @@ import uuid
 import webbrowser
 
 from bokeh.core.property.singletons import Optional
+from bokeh.core.serialization import Deserializer, Serializer
 from bokeh.io import curdoc
 from bokeh.layouts import column
 from bokeh.palettes import Spectral11
@@ -36,27 +38,31 @@ class LivePlotterApp():
         self._doc: Document | None = None
         self.running = False
         self._browser_opened = False
+        self._snapshot = None
+        self._serializer = Serializer()
+        self._deserializer = Deserializer()
 
-    def create_app(self, doc):
-        self._doc = doc
+    def create_app(self, doc) -> None:
+        if not self._doc:
+            self._doc = doc
 
-        # A Div that shows loaded status
-        div = Div(text="<b>📡 Document loaded!</b>", width=200, height=30)
+            # A Div that shows loaded status
+            div = Div(text="<b>📡 Document loaded!</b>", width=200, height=30)
 
-        # A Button you can click to test interactivity
-        btn = Button(label="Test button", button_type="success")
-        btn.on_click(lambda: print("Button clicked!"))
+            # A Button you can click to test interactivity
+            btn = Button(label="Test button", button_type="success")
+            btn.on_click(lambda: print("Button clicked!"))
 
-        # Add widgets to the document root
-        doc.add_root(column(div, btn))
+            # Add widgets to the document root
+            doc.add_root(column(div, btn))
 
-    def initialize(self):
+    def initialize(self) -> None:
         """Open browser and start server in own thread."""
         if self.running:
             print("Server is already running")
             return
 
-        def start():
+        def start() -> None:
             self._server = Server({'/': self.create_app}, port=self.port, allow_websocket_origin=['localhost:5006', '127.0.0.1:5006'])
             self._server.start()
             self._server.show('/')
@@ -64,6 +70,7 @@ class LivePlotterApp():
 
         self._thread = threading.Thread(target=start, daemon=True)
         self._thread.start()
+        self._snapshot = curdoc().to_json()
 
     def attach_figure(self, fig: figure) -> None:
         if self._doc:
@@ -74,12 +81,20 @@ class LivePlotterApp():
                     print(f"Error: {e}")
 
             self._doc.add_next_tick_callback(add)
+            self._snapshot = curdoc().to_json()
 
     def get_doc(self):
         try:
             return curdoc()
         except RuntimeError:
             return None
+
+    def reopen(self) -> None:
+        """bugged right now, doesn't restore figures"""
+        if self._server:
+            curdoc().clear()
+            curdoc().replace_with_json(self._snapshot)  # type: ignore
+            self._server.show('/')
 
 class LivePlotter: 
     """Real-time data plotter implementing multiple display modes.

@@ -233,6 +233,17 @@ ManualConnectionDialog {
     background: $surface;
 }
 
+#splash {
+    grid-size: 2;
+    grid-gutter: 1 2;
+    grid-rows: 1fr 3;
+    padding: 0 1;
+    width: 80;
+    height: 20;
+    border: hkey $primary 80%;
+    background: $surface;
+}
+
 #short-container {
     height: 25%;
 }

@@ -72,11 +72,11 @@ class Peppermint(App):
         ("p", "push_screen('parameter_screen')", "Parameters"),
         ("e", "push_screen('electronic_measurements_screen')", "Electronic Measurements"),
         ("t", "push_screen('temperature_screen')", "Temperature Control"),
-        ("a", "push_screen('main_screen')", "Main Screen")
+        ("a", "push_screen('main_screen')", "Main Screen"),
+        ("f1", "reopen_plot()", "Reopen Data"),
     ]
 
     SCREENS = { 
-        # "main_screen": MainScreen,
         "instrument_screen": InstrumentsScreen,
         "parameter_screen": ParametersScreen,
         "temperature_screen": TemperatureScreen,
@@ -96,6 +96,10 @@ class Peppermint(App):
         self.push_screen('instrument_screen')
         self.push_screen('splash_screen')
         # initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
+
+    def action_reopen_plot(self) -> None:
+        if self.state.plot_server:
+            self.state.plot_server.reopen()
 
 # Run the application, check args at the start
 if __name__ == "__main__":
