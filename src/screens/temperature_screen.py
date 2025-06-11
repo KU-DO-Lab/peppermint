@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 from drivers.Lakeshore_336 import LakeshoreModel336CurrentSource
 from util import *
-from liveplotter import LivePlotter
+from live_plotter import LivePlotter
 
 import numpy as np
 from qcodes.parameters import GroupParameter, MultiParameter, ParameterBase

@@ -21,6 +21,7 @@ class MeasurementContext:
         if hasattr(self.measurement, 'stop'):
             self.measurement.stop()
 
+
 class LoggingStrategy(Protocol):
     """Protocol defining the interface for different logging strategies."""
     
@@ -93,6 +94,7 @@ class ContinuousLogger:
     def is_logging(self) -> bool:
         return self._is_logging
 
+
 class ManualStopStrategy:
     """Strategy for measurements that log until manually stopped (like Setter)."""
     
@@ -127,7 +129,7 @@ class SweepStrategy:
         if self._buffer:
             current_readings = self._buffer.number_of_readings()
             return current_readings < self._expected_points
-        return True  # Fallback for other instruments
+        return True  # Fallback
     
     def cleanup(self) -> None:
         pass

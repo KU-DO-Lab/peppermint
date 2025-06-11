@@ -7,7 +7,13 @@ import argparse
 from textual.app import App
 from textual.theme import Theme
 
-from liveplotter import LivePlotterApp, LivePlotterManager
+from live_plotter import LivePlotterApp, LivePlotterManager
+from screens.instruments_screen import InstrumentsScreen, ManualConnectionDialog
+from screens.main_screen import MainScreen
+from screens.parameters_screen import ParametersScreen
+from screens.settings_screen import SettingsScreen
+from screens.temperature_screen import TemperatureScreen
+from screens.measurements_screen import MeasurementsScreen
 from util import *
 from datasaver import DataSaver
 from themes import *
@@ -16,13 +22,6 @@ from dataclasses import dataclass, field
 from qcodes.parameters import Parameter
 from qcodes.instrument import VisaInstrument
 from textual.reactive import reactive
-
-from screens.InstrumentsScreen import *
-from screens.TemperatureScreen import *
-from screens.ParametersScreen import *
-from screens.SettingsScreen import *
-from screens.ElectronicMeasurementsScreen import *
-from screens.MainScreen import *
 
 @dataclass
 class SharedState:
@@ -81,7 +80,7 @@ class Peppermint(App):
         "instrument_screen": InstrumentsScreen, #type: ignore
         "parameter_screen": ParametersScreen, #type: ignore
         "temperature_screen": TemperatureScreen, #type: ignore
-        "electronic_measurements_screen": ElectronicMeasurementsScreen, # type: ignore
+        "electronic_measurements_screen": MeasurementsScreen, # type: ignore
         "manual_connection_dialog": ManualConnectionDialog, #type: ignore
         "settings_screen": SettingsScreen, #type: ignore
         "measurement_initializer_dialog": MeasurementInitializerDialog,

@@ -6,7 +6,7 @@ from qcodes.parameters import Parameter
 from datasaver import DataSaver
 from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
-from liveplotter import LivePlotter, LivePlotterManager
+from live_plotter import LivePlotter, LivePlotterManager
 from util import run_concurrent
 
 

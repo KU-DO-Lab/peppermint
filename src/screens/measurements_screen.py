@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Dict
 from qcodes.dataset import Measurement
 from qcodes.instrument import VisaInstrument
 from textual import on
@@ -11,12 +11,8 @@ from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
 from util import safe_query_value
 from sweep1d import Sweep1D
-from actionsequence import ActionSequence
+from action_sequence import ActionSequence
 import datetime
-
-# class ModalSaveDialog(ModalScreen):
-#     """Modal screen to handle configuration of table to save measurement to."""
-#     pass
 
 class SweepSequenceItem(ListItem):
     """Widget and runner implementation for a sweep.
@@ -127,8 +123,8 @@ class SweepCreatorItem(Collapsible):
         """Set up initial widgets when the component mounts."""
         self.setup_initial_widgets()
 
-class ElectronicMeasurementsScreen(Screen):
-    """UI for making a sequence of actions.
+class MeasurementsScreen(Screen):
+    """UI for making a sequence of actions which will have data logging and plotting.
 
     Currently this represents sweeps. The sweeps menu is meant to be very broad and expandable. It has two parts:
     (1) The left column begins as an empty list to which a new entry can be added. Each entry represents a sweep 1D. 
