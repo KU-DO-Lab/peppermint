@@ -1,3 +1,4 @@
+from ctypes import cast
 from typing import Dict
 from qcodes.dataset import Measurement
 from qcodes.instrument import VisaInstrument
@@ -32,7 +33,7 @@ class SweepSequenceItem(ListItem):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Static(f"Sweep1D(name={self.sweep._instrument.name}, param={self.sweep._parameter}, start={self.sweep._start_val}, stop={self.sweep._stop_val}, step={self.sweep._step_val})"),
+            Static(f"Sweep1D(name={self.sweep._instrument.name}, param={self.sweep._parameter}, start={self.sweep._start_val}, stop={self.sweep._stop_val}, step={self.sweep._step_count})"),
             classes="short-listitem"
         )
 
@@ -205,40 +206,76 @@ class MeasurementsScreen(Screen):
         idx = self.sweeps_sequence.index # selected idx
         self.sweeps_sequence.pop(idx) # remove it
 
-    def append_sweep_to_sequence(self) -> None:
-        """Turn each item in the list into a single sweep and add it to the list."""
-        try:
-            children = self.query_one("#sweep-info", ListView).children
-            for (i, child) in enumerate(children):
-                instrument = safe_query_value(child, "#instrument-field", Select)
-                parameter = safe_query_value(child, "#parameter-field", Select)
-                start = safe_query_value(child, "#start-field", Input)
-                stop = safe_query_value(child, "#stop-field", Input)
-                step = safe_query_value(child, "#step-field", Input)
-                rate = safe_query_value(child, "#rate-field", Input)
+from textual.widgets import Input, Select, ListView
+from typing import cast
 
-                # only implemented sweep1D atm, will upgrade to a generic later
-                match instrument:
-                    case Keithley2450():
-                        sweep: Sweep1D = Sweep1D(datasaver=self.app.state.datasaver, plot_manager=self.app.state.plot_manager, table_name=self.table_name, instrument=instrument, 
-                                                 parameter=parameter, start=float(start), stop=float(stop), step=float(step))
-                    case CryomagneticsModel4G():
-                        sweep: Sweep1D = Sweep1D(instrument=instrument, plot_manager=self.app.state.plot_manager, start=float(start), stop=float(stop), rate=float(rate))
+def append_sweep_to_sequence(self) -> None:
+    """Turn each item in the list into a single sweep and add it to the list."""
+    try:
+        children = self.query_one("#sweep-info", ListView).children
+        for i, child in enumerate(children):
+            instrument = safe_query_value(child, "#instrument-field", Select)
+            parameter = safe_query_value(child, "#parameter-field", Select)
+            start = safe_query_value(child, "#start-field", Input)
+            stop = safe_query_value(child, "#stop-field", Input)
+            step = safe_query_value(child, "#step-field", Input)
+            rate = safe_query_value(child, "#rate-field", Input)
 
+            if not (instrument and start and stop):
+                continue  # Required fields missing
+
+            try:
+                start_val = float(start)
+                stop_val = float(stop)
+                step_val = int(step) if step else None
+                rate_val = float(rate) if rate else None
+            except ValueError:
+                self.notify(f"Invalid number in sweep fields (item {i+1})")
+                continue
+
+            match instrument:
+                case Keithley2450():
+                    if not (parameter and step_val is not None):
+                        continue
+                    sweep = Sweep1D(
+                        datasaver=self.app.state.datasaver,
+                        plot_manager=self.app.state.plot_manager,
+                        table_name=self.table_name,
+                        instrument=instrument,
+                        parameter=parameter,
+                        start_val=start_val,
+                        stop_val=stop_val,
+                        step_val=step_val
+                    )
+                case CryomagneticsModel4G():
+                    if rate_val is None:
+                        continue
+                    sweep = Sweep1D(
+                        datasaver=self.app.state.datasaver,
+                        plot_manager=self.app.state.plot_manager,
+                        table_name=self.table_name,
+                        instrument=instrument,
+                        start_val=start_val,
+                        stop_val=stop_val,
+                        rate=rate_val
+                    )
+                case _:
+                    sweep = None
+
+            if sweep:
                 self.sweeps_sequence.append(SweepSequenceItem(sweep))
-        except Exception as e:
-            self.notify(f"Error: {e}")
-            return 
-        
-        self.sweeps_configurator.clear()
+
+    except Exception as e:
+        self.notify(f"Error: {e}")
+        return
+
+    self.sweeps_configurator.clear()
 
     def start_sequence(self) -> None:
         """Extract action object (sweep, set) from the elements in the sequence and start the runner."""
         actions = [fn.sweep for fn in self.sweeps_sequence.children]
         runner = ActionSequence(actions)
-        print("starting runner")
         runner.start()
-        runner.run()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""

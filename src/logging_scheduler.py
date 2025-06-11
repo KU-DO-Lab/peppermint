@@ -17,9 +17,9 @@ class MeasurementContext:
     def __enter__(self):
         return self.measurement
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self):
         if hasattr(self.measurement, 'stop'):
-            self.measurement.stop()
+            self.measurement.end_data_collection()
 
 
 class LoggingStrategy(Protocol):
