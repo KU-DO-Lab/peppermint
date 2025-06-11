@@ -8,7 +8,7 @@ from textual.app import App
 from textual.theme import Theme
 
 from live_plotter import LivePlotterApp, LivePlotterManager
-from screens.instruments_screen import InstrumentsScreen, ManualConnectionDialog
+from screens.instruments_screen import InstrumentsScreen, ManualConnectionDialog, SplashScreen
 from screens.main_screen import MainScreen
 from screens.parameters_screen import ParametersScreen
 from screens.settings_screen import SettingsScreen
@@ -76,14 +76,15 @@ class Peppermint(App):
     ]
 
     SCREENS = { 
-        "main_screen": MainScreen,
-        "instrument_screen": InstrumentsScreen, #type: ignore
-        "parameter_screen": ParametersScreen, #type: ignore
-        "temperature_screen": TemperatureScreen, #type: ignore
-        "electronic_measurements_screen": MeasurementsScreen, # type: ignore
-        "manual_connection_dialog": ManualConnectionDialog, #type: ignore
-        "settings_screen": SettingsScreen, #type: ignore
+        # "main_screen": MainScreen,
+        "instrument_screen": InstrumentsScreen,
+        "parameter_screen": ParametersScreen,
+        "temperature_screen": TemperatureScreen,
+        "electronic_measurements_screen": MeasurementsScreen,
+        "manual_connection_dialog": ManualConnectionDialog,
+        "settings_screen": SettingsScreen,
         "measurement_initializer_dialog": MeasurementInitializerDialog,
+        "splash_screen": SplashScreen,
     }
     
     def on_mount(self) -> None:
@@ -92,7 +93,8 @@ class Peppermint(App):
             self.register_theme(theme)
         self.theme = "oxocarbon"
 
-        self.push_screen('main_screen')
+        self.push_screen('instrument_screen')
+        self.push_screen('splash_screen')
         # initialise_or_create_database_at(self.state.database_path) # again, this is a temporary thing, this should be initialized on demand or in experiments menu 
 
 # Run the application, check args at the start

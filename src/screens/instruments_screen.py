@@ -1,15 +1,42 @@
 import logging
-
-from bokeh.models import Switch
+from bokeh.models import Switch, Title
 from util import *
 from textual import on
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.containers import Center, Horizontal, Vertical, Grid
+from textual.containers import Center, Container, Horizontal, Vertical, Grid
 from textual.widgets import Footer, Header, Input, Label, OptionList, Button, Placeholder, Select
 
+class SplashScreen(ModalScreen):
+    BINDINGS = [("escape", "app.pop_screen", "Close")]
+
+    def compose(self) -> ComposeResult:
+        VERSION = 0.1
+
+        TITLE = """[#4d67ea]
+    |               ____                                       _       __ 
+  .'|'.            / __ \\___  ____  ____  ___  _________ ___  (_)___  / /_
+ /.'|\\ \\          / /_/ / _ \\/ __ \\/ __ \\/ _ \\/ ___/ __ `__ \\/ / __ \\/ __/
+ | /|'.|         / ____/  __/ /_/ / /_/ /  __/ /  / / / / / / / / / / /_  
+  \\ |\\/         /_/    \\___/ .___/ .___/\\___/_/  /_/ /_/ /_/_/_/ /_/\\__/  
+   \\|/                    /_/   /_/                                       
+    `           
+"""
+
+        INFO = """[bold]
+[#82cfff]• Check your browswer, a window to show data collection should appear! [/]
+[#42be65]• Press "ESC" to close this dialog! [/]
+        """
+
+        yield Vertical(
+            Center(Label(TITLE)),
+            Container(Label(f"Version: [bold]{VERSION}[/bold]"), id="center-middle"),
+            Label(INFO),
+            id="dialog"
+        )
+
 class ManualConnectionDialog(ModalScreen):
-    BINDINGS = [("escape", "app.pop_screen", "Pop screen")]
+    BINDINGS = [("escape", "app.pop_screen", "Close")]
 
     def compose(self) -> ComposeResult:
         yield Vertical(

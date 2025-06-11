@@ -178,13 +178,57 @@ Select {
     background: $panel;
 }
 
+SplashScreen {
+    align: center middle;
+}
+
+ManualConnectionDialog {
+    align: center middle;
+}
+
+#left-top {
+    /* align: left top; this is the default value and is implied. */
+}
+
+#center-top {
+    align: center top;
+}
+
+#right-top {
+    align: right top;
+}
+
+#left-middle {
+    align: left middle;
+}
+
+#center-middle {
+    align: center middle;
+}
+
+#right-middle {
+    align: right middle;
+}
+
+#left-bottom {
+    align: left bottom;
+}
+
+#center-bottom {
+    align: center bottom;
+}
+
+#right-bottom {
+    align: right bottom;
+}
+
 #dialog {
     grid-size: 2;
     grid-gutter: 1 2;
     grid-rows: 1fr 3;
     padding: 0 1;
-    width: 60;
-    height: 11;
+    width: 80;
+    height: 16;
     border: thick $background 80%;
     background: $surface;
 }

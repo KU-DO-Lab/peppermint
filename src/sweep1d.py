@@ -1,5 +1,3 @@
-import time
-from qcodes.dataset.threading import ParamMeasT
 from qcodes.instrument import VisaInstrument
 from typing import Any, Optional, cast
 
