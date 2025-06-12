@@ -82,6 +82,7 @@ Select {
     height: auto;
     width: auto;
     margin: 0 1;
+    align: center middle;
 }
 
 .container-horizontal-fill {
@@ -297,22 +298,6 @@ Select {
     color: #F05D23;
 }
 
-/*Temperature controller screen*/
-#heater-mode-container {
-    width: auto;
-    height: auto;
-}
-
-#output-range-container {
-    width: auto;
-    height: auto;
-}
-
-#PID-container {
-    width: auto;
-    height: auto;
-}
-
 #refresh-stats-button {
     max-width: 7;
     max-height: 3;
@@ -321,20 +306,23 @@ Select {
 }
 
 #temperature-controller-status {
+    layout: grid;
+    grid-size: 2 8;
+    grid-rows: 3;
+    grid-columns: 2fr;
+    width: 20w;
+    height: 100%;
     dock: right;
-    width: auto;  /* Fixed width instead of fractional */
-    min-width: 30;
-    max-width: 40;
-    background: $panel;  /* Light gray background, you can change this */
-    padding: 2 1;
+    background: $surface;
+    align: center top;
+    padding: 3 1;
 }
 
-.temperature-controller-controls {
+#temperature-status-table {
+    border: tab white 80%;
+    column-span: 2;
+    min-height: 6;
     height: auto;
-    width: auto;
-    border: round white 10%;
-    align-horizontal: center;
-    content-align: center middle;
 }
 
 .inline {
@@ -362,37 +350,55 @@ Select {
 }
 
 #heater-settings {
+    layout: grid;
+    grid-size: 2 2;
+    grid-columns: 1fr 2fr;
+    align: center middle;
     width: auto;
     height: auto;
     max-width: 80%;
     margin: 1 3;
     background: $surface;
     border: tab $primary;
+    padding: 1;
 }
 
 #PID-settings {
+    layout: grid;
+    grid-size: 2 6;
+    grid-rows: 3;
+    grid-columns: 1fr 2fr;
+    align: center middle;
     width: auto;
     height: auto;
     max-width: 80%;
     margin: 1 3;
     background: $surface;
     border: tab $secondary;
+    padding: 1;
 }
 
 #setpoint-settings {
-    width: auto;
-    height: auto;
+    grid-size: 2 2;
+    align: center middle;
     max-width: 80%;
     margin: 1 3;
     background: $surface;
     border: tab $error;
+    padding: 1;
 }
 
 #setpoint-dragging-settings {
+    layout: grid;
+    grid-size: 2 6;
+    grid-rows: 3;
+    grid-columns: 1fr 2fr;
+    align: center middle;
     width: auto;
-    height: auto;
     max-width: 80%;
+    height: auto;
     margin: 1 3;
     background: $surface;
     border: tab $success;
+    padding: 1;
 }

@@ -32,6 +32,8 @@ class SplashScreen(ModalScreen):
 • [bold]Currently in the works:[/bold] setpoints and wait instances for measurements.
 • [bold]Check your browswer[/bold], a window to show data collection should appear!
    (Note, this may be reopened at any time with [bold]'f1'[/bold])
+• [bold]Bindings are listed below.[/bold] Don't forget you can also press [bold]'ctrl+p'[/bold] to
+    show useful info!
         """
 
         yield Vertical(

@@ -107,59 +107,98 @@ class TemperatureScreen(Screen):
 
         # Heater Range
         with Horizontal(id="heater-settings") as container:
+            yield Static("Heater Mode:", classes="inline")
+            yield Container(self.heater_mode, classes="container")
+
+            yield Static("Output Range:", classes="inline")
+            yield Container(self.output_range, classes="container")
+
             yield Button("?", tooltip="Heater range settings. Heater mode can be set to closed loop or open loop which have different purposes:\n\n1. Open loop: for PID-controlled setpoint magic.\n2. Closed loop: for pushing a constant current through the heating element.", disabled=True, classes="tooltip")
-            yield Vertical( Static("Heater Mode:    ", classes="label"), self.heater_mode, id="heater-mode-container" )
-            yield Vertical( Static("Output Range:    ", classes="label"), self.output_range, id="output-range-container" )
             container.border_title = "[bold]Heater Settings"
 
         # PID
-        with Vertical(id="PID-settings") as container:
+        with Container(id="PID-settings") as container:
+            yield Static("P:", classes="inline")
+            yield Input(placeholder="...", type="number", classes="inline", id="P")
+
+            yield Static("I:", classes="inline")
+            yield Input(placeholder="...", type="number", classes="inline", id="I")
+
+            yield Static("D:", classes="inline")
+            yield Input(placeholder="...", type="number", classes="inline", id="D")
+
+            yield Static("Manual Output:", classes="inline")
+            yield Input(placeholder="...", type="number", classes="inline", id="manual-output")
+
             yield Button("?", tooltip="PID values for the heating element's setpoint control. If the heater never stabilizes, adjust P. If the heater never reaches the setpoint raise I by double. If it instead  oscillates about it for too long, lower by a half. Raising and lowering D may help it get to the setpoint faster. Manual output forcibly sets the heater output % without regard for setpoint.", disabled=True, classes="tooltip")
-            yield Static("PID:", classes="label")
-            yield Horizontal(Static("P:", classes="inline"), Input(placeholder="...", type="number", classes="input-field", id="P"), classes="container")
-            yield Horizontal(Static("I:", classes="inline"), Input(placeholder="...", type="number", classes="input-field", id="I"), classes="container")
-            yield Horizontal(Static("D:", classes="inline"), Input(placeholder="...", type="number", classes="input-field", id="D"), classes="container")
-            yield Horizontal(Static("Manual Output:", classes="label"), Input(placeholder="...", type="number", classes="input-field", id="manual-output"), classes="container")
             container.border_title = "[bold]PID Settings"
 
         # Setpoint
         with Horizontal(id="setpoint-settings") as container:
-            yield Button("?", tooltip="Go to a setpoint! Only works in closed loop mode.", disabled=True, classes="tooltip")
             yield Static("Setpoint:", classes="label")
             yield Input(placeholder="...", disabled=False, type="number", classes="input-field", id="setpoint-field")
-            yield Button("Confirm!", id="setpoint-start", classes="confirmation")
+            yield Button("Go!", id="setpoint-start", classes="confirmation")
+
+            yield Button("?", tooltip="Go to a setpoint! Only works in closed loop mode.", disabled=True, classes="tooltip")
             container.border_title = "[bold]Setpoint Settings"
 
         # Setpoint Dragging
-        with Vertical(id="setpoint-dragging-settings") as container:
+        with Container(id="setpoint-dragging-settings") as container:
+            yield Static("Target Rate", classes="inline")
+            yield Input(placeholder="...", type="number", classes="inline", id="setpoint-dragging-rate-field")
+
+            yield Static("P:", classes="inline")
+            yield Input(placeholder="20", type="number", classes="inline", id="dragging-p-field")
+
+            yield Static("I:", classes="inline")
+            yield Input(placeholder="1e-4", type="number", classes="inline", id="dragging-i-field")
+
+            yield Static("D:", classes="inline")
+            yield Input(placeholder="10", type="number", classes="inline", id="dragging-d-field")
+
+            with Horizontal(classes="confirmation"):
+                yield Button("Go!", id="setpoint-dragging-start", classes="inline")
+                yield Button("Stop!", id="setpoint-dragging-stop", classes="inline")
+
             yield Button("?", tooltip="For maintaining a gentle ascent/descent at a fixed rate.\n\nCurrently requires supervision to change output ranges AND watch over 'I' since different ranges may demand higher/lower values", disabled=True, classes="tooltip")
-            yield Static("Setpoint Dragging:", classes="inline")
-            with Horizontal(classes="container"):
-                yield Static("Target Rate", classes="label")
-                yield Input(placeholder="...", type="number", classes="input-field", id="setpoint-dragging-rate-field")
-
-            with Horizontal(classes="container"):
-                yield Horizontal(Static("P:", classes="label"), Input(placeholder="20", type="number", classes="input-field", id="dragging-p-field"), classes="container")
-                yield Horizontal(Static("I:", classes="label"), Input(placeholder="1e-4", type="number", classes="input-field", id="dragging-i-field"), classes="container")
-                yield Horizontal(Static("D:", classes="label"), Input(placeholder="10", type="number", classes="input-field", id="dragging-d-field"), classes="container")
-
-            with Horizontal(classes="container"):
-                yield Button("Go!", id="setpoint-dragging-start", classes="confirmation")
-                yield Button("Stop!", id="setpoint-dragging-stop", classes="confirmation")
             container.border_title = "[bold]Setpoint Dragging Settings"
                 
         # Sidebar
-        with Container(classes="sidebar", id="temperature-controller-status"):
-            yield Center(Static("Information", classes="centered-subtitle"))
-            yield Horizontal(Static("Active Channel:", classes="label"), self.status_table, classes="accent-container")
-            yield Rule()
-            yield Horizontal(Static("Output %:", classes="label"), Static("...", id="output-percentage", classes="label"), classes="accent-container")
-            yield Horizontal(Static("Mean:", classes="label"), Static("N/A", id="stats-mean", classes="label"), classes="accent-container")
-            yield Horizontal(Static("Std:", classes="label"), Static("N/A", id="stats-std", classes="label"), classes="accent-container")
-            yield Horizontal(Static("Gradient:", classes="label"), Static("N/A", id="stats-gradient", classes="label"), classes="accent-container")
-            yield Horizontal(Static("Acceleration:", classes="label"), Static("N/A", id="stats-acceleration", classes="label"), classes="accent-container")
-            yield Horizontal(Static("Output Variation:", classes="label"), Static("N/A", id="stats-output-variation", classes="label"), classes="accent-container")
-            yield Horizontal(Button("", classes="right-aligned-widget", id="refresh-stats-button"), classes="right-aligned-widget")
+        with Container(id="temperature-controller-status"):
+            with Center(classes="container-horizontal-fill") as container: 
+                yield Static("[bold]Information")
+                container.styles.column_span = 2;
+
+            with Container(id="temperature-status-table") as container:
+                yield self.status_table
+                container.border_title = "[bold]Active Channel:"
+
+            with Center() as container: 
+                separator = Rule(line_style="dashed")
+                separator.styles.column_span = 2;
+                yield separator
+                container.styles.column_span = 2;
+                separator.styles.color = self.app.theme_variables["background"]
+
+            yield Static("Output %:", classes="label")
+            yield Static("N/A", id="output-percentage", classes="label")
+
+            yield Static("Mean:", classes="label")
+            yield Static("N/A", id="stats-mean", classes="label")
+
+            yield Static("Std:", classes="label")
+            yield Static("N/A", id="stats-std", classes="label")
+
+            yield Static("Gradient:", classes="label")
+            yield Static("N/A", id="stats-gradient", classes="label")
+
+            yield Static("Acceleration:", classes="label")
+            yield Static("N/A", id="stats-acceleration", classes="label")
+
+            yield Static("Output Variation:", classes="label")
+            yield Static("N/A", id="stats-output-variation", classes="label")
+
+            yield Horizontal(Button("", tooltip="Statistics are cumulative, press this to clear the stats buffer.", id="refresh-stats-button"), classes="tooltip")
 
         yield Footer()
 
