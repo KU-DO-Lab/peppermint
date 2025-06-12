@@ -1,12 +1,12 @@
 from typing import Optional, Protocol
 
-from logging_scheduler import LoggingStrategy
+from logging_scheduler import LoggingStrategy, SweepStrategy
 
 
 class Measurement(Protocol):
     """Defines the methods which all measurement implementations (set/sweep) should inherit."""
 
-    lifetime: Optional[LoggingStrategy] | None
+    lifetime: Optional[SweepStrategy | None]
 
     def start(self) -> None:
         """Initiates the measurement, SEPARATE from the logging/data collection loop."""

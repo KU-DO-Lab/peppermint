@@ -79,9 +79,9 @@ class SweepCreatorItem(Collapsible):
         """Set up widgets for Keithley sweep configuration."""
         keithley_widgets = [
             Select(options=[("Voltage", "voltage"), ("Current", "current")], classes="inline", id="parameter-field"),
-            Input(placeholder="Start", type="number", classes="inline", id="start-field"),
-            Input(placeholder="Stop", type="number", classes="inline", id="stop-field"),
-            Input(placeholder="# Steps", type="number", classes="inline", id="step-field")
+            Input(placeholder="Start", value="1", type="number", classes="inline", id="start-field"),
+            Input(placeholder="Stop", value="0", type="number", classes="inline", id="stop-field"),
+            Input(placeholder="# Steps", value="50", type="number", classes="inline", id="step-field")
         ]
         await self.clear_and_setup_widgets(keithley_widgets)
 
@@ -161,7 +161,6 @@ class MeasurementsScreen(Screen):
         with Container(classes="sidebar", id="measurement-sequence"):
             yield Center(Static("Sequence", classes="centered-subtitle"), classes="centered-widget")
             yield self.sweeps_sequence
-            # yield Rule()
             with Horizontal(classes="confirmation"):
                 yield Button("Save!")
                 yield Button("Start Sequence", id="start-sequence")
@@ -171,7 +170,6 @@ class MeasurementsScreen(Screen):
         
     def create_list_item(self) -> None:
         """Add an entry to the sweep configuration column."""
-        print("test")
         self.sweeps_configurator.mount(SweepCreatorItem())
 
     def remove_list_item(self, widget: SweepCreatorItem | None) -> None:

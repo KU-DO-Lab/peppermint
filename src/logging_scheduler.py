@@ -3,6 +3,7 @@ import time
 from typing import Any, Callable, Protocol
 
 from bokeh.core.property.singletons import Optional
+from qcodes.instrument import VisaInstrument
 from qcodes.parameters import Parameter
 
 from datasaver import DataSaver
@@ -38,12 +39,12 @@ class ContinuousLogger:
     """A flexible logger that can handle different measurement lifetimes."""
     
     def __init__(self, datasaver: DataSaver, table_name: str, polling_rate: float = 0.2):
-        self._datasaver = datasaver
-        self._table_name = table_name
-        self._polling_rate = polling_rate
+        self._datasaver: DataSaver = datasaver
+        self._table_name: str = table_name
+        self._polling_rate: float = polling_rate
         self._logging_thread: Optional[threading.Thread] | None = None
         self._stop_event = threading.Event()
-        self._is_logging = False
+        self._is_logging: bool = False
         self._lock = threading.Lock()
         
     def start_logging(self, data_source: Callable[[], list[tuple[Parameter, Any]]], 
@@ -69,8 +70,6 @@ class ContinuousLogger:
                 return
             
             self._stop_event.set()
-            if self._logging_thread and self._logging_thread.is_alive():
-                self._logging_thread.join(timeout=5.0)
             self._is_logging = False
     
     def _logging_loop(self, data_source: Callable[[], list[tuple[Parameter, Any]]], 
@@ -79,16 +78,17 @@ class ContinuousLogger:
         try:
             while not self._stop_event.is_set() and strategy.should_continue_logging():
                 try:
-                    data_points = data_source()
+                    data_points: list[tuple[Parameter, Any]] = data_source()
                     if data_points:
-                        for param, value in data_points:
-                            self._datasaver.add_result(self._table_name, [(param, value)])
+                        for row in data_points:
+                            self._datasaver.add_result(self._table_name, row)
                 except Exception as e:
                     print(f"Error during logging: {e}")
                 
                 time.sleep(self._polling_rate)
         finally:
             strategy.cleanup()
+            self.stop_logging()
     
     @property
     def is_logging(self) -> bool:
@@ -115,7 +115,7 @@ class ManualStopStrategy:
 class SweepStrategy:
     """Strategy for sweep measurements that log until sweep completion."""
     
-    def __init__(self, instrument, expected_points: int):
+    def __init__(self, instrument: VisaInstrument, expected_points: int):
         self._instrument = instrument
         self._expected_points = expected_points
         self._buffer = None

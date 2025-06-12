@@ -1,7 +1,7 @@
 from qcodes.instrument import VisaInstrument
 from typing import Any, Optional, cast
 
-from qcodes.parameters import Parameter
+from qcodes.parameters import Parameter, parameter
 from datasaver import DataSaver
 from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
@@ -42,7 +42,9 @@ class Sweep1D(Measurement):
         self.buffer_name = None
         self.lifetime: Optional[SweepStrategy] | None = None
         
-        # Axis data for sweep
+        # Keithley specific things
+        self._sense_param: Parameter | None = None
+        self._source_param: Parameter | None = None
         self._axis_data: list[float] = []
         self._previous_buffer_size = 0
 
@@ -54,6 +56,7 @@ class Sweep1D(Measurement):
         }
 
         handler = handlers.get(type(self._instrument))  # type: ignore
+        print(f"Sweeping {type(self._instrument)}")
         if handler:
             handler()
 
@@ -84,22 +87,21 @@ class Sweep1D(Measurement):
             3. Dynamically set sense/source range based on the input (makes some assumptions currently)
             4. Sweep setup may include redundant steps, optimize it
         """
-        if not self._step_count or not self._start_val or not self._stop_val:
-            raise ValueError("Sweep parameters not properly configured")
-
-        if self._sweep_active:
-            raise RuntimeError("Sweep already active, cannot start new sweep")
+        # if not self._step_count or not self._start_val or not self._stop_val:
+        #     raise ValueError("Sweep parameters not properly configured")
+        #
+        # if self._sweep_active:
+        #     raise RuntimeError("Sweep already active, cannot start new sweep")
 
         # Setup and initiate the sweep
+        self._sweep_active = True
+        self._stop_requested = False
         keithley = cast(Keithley2450, self._instrument)
         self.buffer_name = keithley.buffer_name()
         self.buffer = keithley.submodules[f"_buffer_{self.buffer_name}"]
         self.lifetime = SweepStrategy(self._instrument, cast(int, self._step_count))
 
         # 1. Setup the sweep
-        self._sense_param = None
-        self._source_param = None
-
         try: 
             keithley.sense.function("current" if self._parameter == "voltage" else "voltage")
             keithley.sense.range(1e-5 if self._parameter == "voltage" else 2)
@@ -108,7 +110,7 @@ class Sweep1D(Measurement):
             keithley.source.range(2 if self._parameter == "voltage" else 1e-5)
             keithley.source.sweep_setup(cast(float, self._start_val), cast(float, self._stop_val), cast(int, self._step_count))
 
-            # declare the sense param and source param as their actual objects
+            # Declare the sense param for the DataSaver
             if self._parameter == "voltage":
                 self._sense_param = cast(Parameter, keithley.submodules["_sense_current"].current)
                 self._source_param = cast(Parameter, keithley.submodules["_source_voltage"].voltage)
@@ -116,10 +118,13 @@ class Sweep1D(Measurement):
                 self._sense_param = cast(Parameter, keithley.submodules["_sense_voltage"].voltage)
                 self._source_param = cast(Parameter, keithley.submodules["_source_current"].current)
 
+            self._axis_data: list[float] = keithley.source.sweep_axis() # just a linspace between start stop with steps.
+
         except Exception as e:
             print(f"Failed to set up Keithley sweep, check that all parameters are being set correctly: {e}")
 
         if not self._source_param or not self._sense_param:
+            print("return")
             return
 
         # 2. Configure the plotter and start it.
@@ -128,11 +133,10 @@ class Sweep1D(Measurement):
                 self._datasaver,
                 self._table_name,
                 title = "Temperature Monitor",
-                xlabel = f"{source_param.full_name}",       # type: ignore
-                ylabel = f"{sense_param.full_name}",        # type: ignore
-                xaxis_key = f"{source_param.full_name}",    # type: ignore
+                xlabel = f"{self._source_param.full_name}",       # type: ignore
+                ylabel = f"{self._sense_param.full_name}",        # type: ignore
+                xaxis_key = f"{self._source_param.full_name}",    # type: ignore
             )
-
             self._plot_manager.add_plotter(plotter)
 
         except Exception as e:
@@ -157,9 +161,6 @@ class Sweep1D(Measurement):
 
         # 4. Begin data collection:
         try:
-            self._sweep_active = True
-            self._stop_requested = False
-
             self._previous_buffer_size = 0
             self._logger.start_logging(
                 data_source=self._get_new_data_keithley,
@@ -168,10 +169,8 @@ class Sweep1D(Measurement):
 
         except Exception as e:
             print(f"Error in data collection startup for Keithley 2450: {e}")
-        finally:
-            keithley.reset()
 
-    def _get_new_data_keithley(self) -> list[tuple[Parameter, Any]]:
+    def _get_new_data_keithley(self) -> list[list[tuple[Parameter, Any]]]:
         """Data source function for ContinuousLogger.
         
         Returns new data points since last call, or empty list if no new data.
@@ -188,19 +187,19 @@ class Sweep1D(Measurement):
             
             # Get all data from buffer
             data_block: list[Any] = self.buffer.get_data(1, current_buffer_size)
-            
+
             # Extract only new data
             new_sense_data = data_block[self._previous_buffer_size:]
-            new_axis_data = self._axis_data[self._previous_buffer_size:self._previous_buffer_size + len(new_sense_data)]
+            new_axis_data = self._axis_data[self._previous_buffer_size:]
             
             # Update tracking
             self._previous_buffer_size = current_buffer_size
-            
-            # Format as parameter-value pairs
-            data_points = []
-            for axis_val, sense_val in zip(new_axis_data, new_sense_data):
-                data_points.append((self._source_param, axis_val))
-                data_points.append((self._sense_param, sense_val))
+
+            source_data: list[tuple[Parameter, float]] = list(zip([self._source_param for _ in new_axis_data], new_axis_data))
+            sense_data: list[tuple[Parameter, float]] = list(zip([self._sense_param for _ in new_sense_data], new_sense_data))
+            data_points: list[list[tuple[Parameter, Any]]] = []
+            for _, (source_tup, sense_tup) in enumerate(zip(source_data, sense_data)):
+                data_points.append([source_tup, sense_tup])
             
             return data_points
             

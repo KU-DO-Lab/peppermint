@@ -1,5 +1,6 @@
 from enum import Enum
 import threading
+import time
 from sweep1d import *
 import concurrent.futures
 
@@ -80,11 +81,13 @@ class ActionSequence:
                 # Start the measurement (non-blocking)
                 try:
                     measurement.start()
+                    print(f"Started measurement {i+1}")
                 except Exception as e:
                     print(f"Error starting measurement {i}: {e}")
                     self._status = SequenceStatus.ERROR
                     return
                 
+                time.sleep(1) # Wait for the action to start before we check if it is done.
                 # Wait for this measurement to complete
                 if not self._wait_for_current_measurement():
                     # Either stopped or error occurred
