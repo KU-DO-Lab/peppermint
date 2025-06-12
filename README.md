@@ -1,8 +1,9 @@
 # Peppermint
 
- <img align="right" width="250" alt="splash screen" src="" />
-A short description with an image of the application.
+ <img align="right" width="250" alt="splash screen" src="https://github.com/user-attachments/assets/c87c31f3-cc14-4712-8eb6-de4c60afc650" />
 
+TUI application developed by Ovchinnikov Resarch Group at the University of Kansas for easy, interactive transport measurements. 
+ 
 ## Installation 
 
 Clone this repository and install dependencies with [poetry](https://python-poetry.org/). Then start the application using `poetry run Peppermint.py` (or equivalent commands, depending on your installation method). `poetry lock` and `poetry install` should be used to initialize your virtual environment and ensure that all packages are downloaded, once the repository is cloned.
