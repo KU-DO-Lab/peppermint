@@ -1,10 +1,11 @@
 import logging
 from bokeh.models import Switch, Title
+from textual.reactive import reactive
 from util import *
 from textual import on
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.containers import Center, Container, Horizontal, Vertical, Grid
+from textual.containers import Center, Container, Horizontal, HorizontalGroup, Vertical, Grid, VerticalScroll
 from textual.widgets import Footer, Header, Input, Label, OptionList, Button, Placeholder, Select
 
 class SplashScreen(ModalScreen):
@@ -13,46 +14,45 @@ class SplashScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         VERSION = 0.1
 
-        TITLE = """[bold][#4d67ea]
-    |               ____                                       _       __ 
-  .'|'.            / __ \\___  ____  ____  ___  _________ ___  (_)___  / /_
- /.'|\\ \\          / /_/ / _ \\/ __ \\/ __ \\/ _ \\/ ___/ __ `__ \\/ / __ \\/ __/
- | /|'.|         / ____/  __/ /_/ / /_/ /  __/ /  / / / / / / / / / / /_  
-  \\ |\\/         /_/    \\___/ .___/ .___/\\___/_/  /_/ /_/ /_/_/_/ /_/\\__/  
-   \\|/                    /_/   /_/                                       
-    `           
+        leaf_color: str = self.app.theme_variables["primary"]
+        title_color: str = self.app.theme_variables["accent"]
+
+        print(leaf_color)
+        TITLE = f"""[bold]
+    [{leaf_color}] | [/]        [{title_color}]      ____                                       _       __               [/]
+  [{leaf_color}] .'|'. [/]      [{title_color}]     / __ \\___  ____  ____  ___  _________ ___  (_)___  / /_             [/]
+ [{leaf_color}] /.'|\\ \\ [/]   [{title_color}]      / /_/ / _ \\/ __ \\/ __ \\/ _ \\/ ___/ __ `__ \\/ / __ \\/ __/      [/]
+ [{leaf_color}] | /|'.| [/]     [{title_color}]   / ____/  __/ /_/ / /_/ /  __/ /  / / / / / / / / / / /_                [/] 
+  [{leaf_color}] \\ |\\/ [/]    [{title_color}]    /_/    \\___/ .___/ .___/\\___/_/  /_/ /_/ /_/_/_/ /_/\\__/           [/] 
+   [{leaf_color}] \\|/ [/]      [{title_color}]             /_/   /_/                                                    [/]
+    [{leaf_color}] ` [/]          
 """
 
-        INFO = """[bold]
-• Check your browswer, a window to show data collection should appear!
-   (Note, this may be reopened at any time with "f1")
+        INFO = """
+• [bold]Currently in the works:[/bold] setpoints and wait instances for measurements.
+• [bold]Check your browswer[/bold], a window to show data collection should appear!
+   (Note, this may be reopened at any time with [bold]'f1'[/bold])
         """
 
         yield Vertical(
             Center(Label(TITLE)),
             Label(INFO),
-            Container(Label(f"Version: [bold]{VERSION}[/bold] {" "*8} Press 'ESC' to close this dialog."), id="center-middle"),
+            Container(Label(f"Version: [bold]{VERSION}[/bold] {" "*8} Press [bold]'ESC'[/bold] to close this dialog."), id="center-middle"),
             id="splash"
         )
 
 class ManualConnectionDialog(ModalScreen):
-    BINDINGS = [("escape", "app.pop_screen", "Close")]
+    BINDINGS = [("escape", "app.pop_screen", "Cancel")]
 
     def compose(self) -> ComposeResult:
-        yield Vertical(
-            Label("Manual Connection", id="title", classes="title"),
-            Horizontal(            
-                Select(options=[("Keithley", "keithley"), ("Lakeshore", "lakeshore"), ("Cryomagnetics Model 4G", "cryomagnetics4g")], id="instrument-type", classes="inline-select"),
-                Input(placeholder="Address", id="instrument-address", classes="inline"),
-                classes="container-fill-horizontal"
-            ),
-            Horizontal(
-                Button("Cancel", variant="primary", id="cancel"),
-                Button("Confirm", variant="primary", id="confirm"),
-                classes="confirmation"
-            ),
-            id="dialog",
-        )
+        with Container(classes="dialog") as container:
+            with Horizontal(classes="container-fill-horizontal"):
+                yield Select(options=[("Keithley", "keithley"), ("Lakeshore", "lakeshore"), ("Cryomagnetics Model 4G", "cryomagnetics4g")], id="instrument-type", classes="inline")
+                yield Input(placeholder="Address", id="instrument-address", classes="inline")
+            with Horizontal(classes="confirmation"):
+                yield Button("Cancel", variant="primary", id="cancel")
+                yield Button("Confirm", variant="primary", id="confirm")
+            container.border_title = "[bold]Manual Connection"
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle the pressed event for buttons on this screen."""
@@ -93,16 +93,20 @@ class ManualConnectionDialog(ModalScreen):
 class InstrumentsScreen(Screen):
     """Everything that will be displayed on the "Instruments" Tab."""
 
-    BINDINGS = [("m", "app.push_screen('manual_connection_dialog')", "Manual Connection"), ("b", "app.dismiss()")]
+    BINDINGS = [("m", "app.push_screen('manual_connection_dialog')", "Manual Connection")]
 
     def compose(self) -> ComposeResult:
-        yield Header()
         self.detected_instrument_list: OptionList = OptionList(*self.app.state.detected_instruments)
-        self.connected_instrument_list: OptionList = OptionList(*self.app.state.connected_instruments)  # Start empty
-        yield Horizontal(
-            Vertical(Label("Detected Instruments"), self.detected_instrument_list),
-            Vertical(Label("Connected Instruments"), self.connected_instrument_list),
-        )
+        self.connected_instrument_list: OptionList = OptionList(*self.app.state.connected_instruments)
+
+        yield Header()
+        with HorizontalGroup(classes="short-container"):
+            with VerticalScroll(id="detected-instruments") as container:
+                yield self.detected_instrument_list
+                container.border_title = "[bold]Detected Instruments"
+            with VerticalScroll(id="connected-instruments") as container:
+                yield self.connected_instrument_list
+                container.border_title = "[bold]Connected Instruments"
         yield Footer()
 
     @on(OptionList.OptionSelected)
@@ -157,4 +161,3 @@ class InstrumentsScreen(Screen):
         self.connected_instrument_list.clear_options()
         for instrument in self.app.state.connected_instruments:
             self.connected_instrument_list.add_option(instrument.name)
-

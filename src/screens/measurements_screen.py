@@ -4,9 +4,10 @@ from qcodes.dataset import Measurement
 from qcodes.instrument import VisaInstrument
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Center, Horizontal, Vertical
+from textual.containers import Center, Container, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Collapsible, Footer, Header, Input, ListItem, ListView, Rule, Select, Static, Button
+from textual.widgets import Input, Select, ListView
 
 from drivers.Keithley_2450 import Keithley2450
 from drivers.M4G_qcodes_official import CryomagneticsModel4G
@@ -34,7 +35,7 @@ class SweepSequenceItem(ListItem):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Static(f"Sweep1D(name={self.sweep._instrument.name}, param={self.sweep._parameter}, start={self.sweep._start_val}, stop={self.sweep._stop_val}, step={self.sweep._step_count})"),
-            classes="short-listitem"
+            classes="inline"
         )
 
 class SweepCreatorItem(Collapsible):
@@ -42,7 +43,7 @@ class SweepCreatorItem(Collapsible):
         super().__init__()
         self.instruments = self.app.state.connected_instruments
         self.select_options = [(instr.name, instr) for instr in self.instruments]
-        self.main_horizontal = Horizontal(classes="container") # Contains fields to configure sweep
+        self.main_horizontal = Horizontal(classes="container-horizontal-fill") # Contains fields to configure sweep
 
     def compose(self) -> ComposeResult:
             yield self.main_horizontal
@@ -77,8 +78,7 @@ class SweepCreatorItem(Collapsible):
     async def set_keithley_widgets(self) -> None:
         """Set up widgets for Keithley sweep configuration."""
         keithley_widgets = [
-            Select(options=[("Voltage", "voltage"), ("Current", "current")], 
-                   classes="inline-select", id="parameter-field"),
+            Select(options=[("Voltage", "voltage"), ("Current", "current")], classes="inline", id="parameter-field"),
             Input(placeholder="Start", type="number", classes="inline", id="start-field"),
             Input(placeholder="Stop", type="number", classes="inline", id="stop-field"),
             Input(placeholder="# Steps", type="number", classes="inline", id="step-field")
@@ -104,7 +104,7 @@ class SweepCreatorItem(Collapsible):
                 classes="container-15",
                 id="instrument-settings"
             ),
-            Select(options=self.select_options, classes="inline-select", id="instrument-field"),
+            Select(options=self.select_options, classes="inline", id="instrument-field"),
         )
 
     @on(Select.Changed)
@@ -144,44 +144,34 @@ class MeasurementsScreen(Screen):
         self.table_name: str = self.app.state.datasaver.register_table(f"Measurement Test: {date}")
 
     def compose(self) -> ComposeResult:
-        self.sweeps_configurator = ListView(classes="outlined-container-fill-horizontal", id="sweep-info")
-        self.sweeps_sequence = ListView(classes="info", id="sweep-sequence")
+        self.sweeps_configurator = ListView(id="action-creator-list")
+        self.sweeps_sequence = ListView(id="sweep-sequence")
 
         yield Header()
-        yield Horizontal(
 
-            # Left side info
-            Vertical(
-                Center(Static("Sweep Creator", classes="centered-subtitle"), classes="centered-widget"),
-                self.sweeps_configurator,
-                Horizontal(
-                    Button("Append to Sequence", classes="inline-left", id="append-sweep-to-sequence"),
-                    Button("+", classes="inline-right", id="create-list-item"),
-                    Button("-", classes="inline-right", id="remove-list-item"),
-                    id="sweep-creator-controls" 
-                ),
-                classes="container-fill-horizontal",
-            ),
+        # Left: creator
+        with Container(id="action-creator") as container:
+            yield self.sweeps_configurator
+            with Horizontal(classes="confirmation", id="sweep-creator-controls"):
+                yield Button("Append to Sequence", classes="inline", id="append-sweep-to-sequence")
+                yield Button("+", classes="inline", id="create-list-item")
+            container.border_title = "[bold]Add Instruction"
 
-            # Right side information
-            Vertical(
-                Center(Static("Sequence", classes="centered-subtitle"), classes="centered-widget"),
-                Horizontal(self.sweeps_sequence),
-                Rule(),
-                Horizontal(
-                    Button("Save!"),
-                    Button("Start Sequence", id="start-sequence"),
-                    Button("-", classes="inline-right", id="remove-sequence-item"),
-                    classes="container-fill-horizontal",
-                ),
-                classes="sidebar",
-                id="measurement-sequence",
-            ),
-        )
+        # Right sidebar
+        with Container(classes="sidebar", id="measurement-sequence"):
+            yield Center(Static("Sequence", classes="centered-subtitle"), classes="centered-widget")
+            yield self.sweeps_sequence
+            # yield Rule()
+            with Horizontal(classes="confirmation"):
+                yield Button("Save!")
+                yield Button("Start Sequence", id="start-sequence")
+                yield Button("-", classes="inline-right", id="remove-sequence-item")
+
         yield Footer()
         
     def create_list_item(self) -> None:
         """Add an entry to the sweep configuration column."""
+        print("test")
         self.sweeps_configurator.mount(SweepCreatorItem())
 
     def remove_list_item(self, widget: SweepCreatorItem | None) -> None:
@@ -206,70 +196,68 @@ class MeasurementsScreen(Screen):
         idx = self.sweeps_sequence.index # selected idx
         self.sweeps_sequence.pop(idx) # remove it
 
-from textual.widgets import Input, Select, ListView
-from typing import cast
 
-def append_sweep_to_sequence(self) -> None:
-    """Turn each item in the list into a single sweep and add it to the list."""
-    try:
-        children = self.query_one("#sweep-info", ListView).children
-        for i, child in enumerate(children):
-            instrument = safe_query_value(child, "#instrument-field", Select)
-            parameter = safe_query_value(child, "#parameter-field", Select)
-            start = safe_query_value(child, "#start-field", Input)
-            stop = safe_query_value(child, "#stop-field", Input)
-            step = safe_query_value(child, "#step-field", Input)
-            rate = safe_query_value(child, "#rate-field", Input)
+    def append_sweep_to_sequence(self) -> None:
+        """Turn each item in the list into a single sweep and add it to the list."""
+        try:
+            children = self.query_one("#action-creator-list", ListView).children
+            for i, child in enumerate(children):
+                instrument = safe_query_value(child, "#instrument-field", Select)
+                parameter = safe_query_value(child, "#parameter-field", Select)
+                start = safe_query_value(child, "#start-field", Input)
+                stop = safe_query_value(child, "#stop-field", Input)
+                step = safe_query_value(child, "#step-field", Input)
+                rate = safe_query_value(child, "#rate-field", Input)
 
-            if not (instrument and start and stop):
-                continue  # Required fields missing
+                if not (instrument and start and stop):
+                    continue  # Required fields missing
 
-            try:
-                start_val = float(start)
-                stop_val = float(stop)
-                step_val = int(step) if step else None
-                rate_val = float(rate) if rate else None
-            except ValueError:
-                self.notify(f"Invalid number in sweep fields (item {i+1})")
-                continue
+                try:
+                    start_val = float(start)
+                    stop_val = float(stop)
+                    step_val = int(step) if step else None
+                    rate_val = float(rate) if rate else None
+                except ValueError:
+                    self.notify(f"Invalid number in sweep fields (item {i+1})")
+                    continue
 
-            match instrument:
-                case Keithley2450():
-                    if not (parameter and step_val is not None):
-                        continue
-                    sweep = Sweep1D(
-                        datasaver=self.app.state.datasaver,
-                        plot_manager=self.app.state.plot_manager,
-                        table_name=self.table_name,
-                        instrument=instrument,
-                        parameter=parameter,
-                        start_val=start_val,
-                        stop_val=stop_val,
-                        step_val=step_val
-                    )
-                case CryomagneticsModel4G():
-                    if rate_val is None:
-                        continue
-                    sweep = Sweep1D(
-                        datasaver=self.app.state.datasaver,
-                        plot_manager=self.app.state.plot_manager,
-                        table_name=self.table_name,
-                        instrument=instrument,
-                        start_val=start_val,
-                        stop_val=stop_val,
-                        rate=rate_val
-                    )
-                case _:
-                    sweep = None
+                match instrument:
+                    case Keithley2450():
+                        if not (parameter and step_val is not None):
+                            continue
+                        sweep = Sweep1D(
+                            datasaver=self.app.state.datasaver,
+                            plot_manager=self.app.state.plot_manager,
+                            table_name=self.table_name,
+                            instrument=instrument,
+                            parameter=parameter,
+                            start_val=start_val,
+                            stop_val=stop_val,
+                            step_val=step_val
+                        )
+                    case CryomagneticsModel4G():
+                        if rate_val is None:
+                            continue
+                        sweep = Sweep1D(
+                            datasaver=self.app.state.datasaver,
+                            plot_manager=self.app.state.plot_manager,
+                            table_name=self.table_name,
+                            instrument=instrument,
+                            start_val=start_val,
+                            stop_val=stop_val,
+                            rate=rate_val
+                        )
+                    case _:
+                        sweep = None
 
-            if sweep:
-                self.sweeps_sequence.append(SweepSequenceItem(sweep))
+                if sweep:
+                    self.sweeps_sequence.append(SweepSequenceItem(sweep))
 
-    except Exception as e:
-        self.notify(f"Error: {e}")
-        return
+        except Exception as e:
+            self.notify(f"Error: {e}")
+            return
 
-    self.sweeps_configurator.clear()
+        self.sweeps_configurator.clear()
 
     def start_sequence(self) -> None:
         """Extract action object (sweep, set) from the elements in the sequence and start the runner."""

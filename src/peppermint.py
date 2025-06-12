@@ -58,11 +58,6 @@ class Peppermint(App):
         self.state.datasaver = DataSaver("./datasaver.db")
         self.state.plot_server = LivePlotterApp()
         self.state.plot_server.initialize()
-
-        p = figure(width=400, height=400)
-        p.line([1, 2, 3, 4, 5], [6, 7, 2, 4, 5], line_width=2)
-
-        self.state.plot_server.attach_figure(p)
         self.state.plot_manager = LivePlotterManager(self.state.plot_server)
 
     CSS_PATH = "peppermint.css"
