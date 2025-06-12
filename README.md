@@ -1,9 +1,11 @@
 # Peppermint
 
- <img align="right" width="250" alt="splash screen" src="https://github.com/user-attachments/assets/c87c31f3-cc14-4712-8eb6-de4c60afc650" />
+ <img align="right" width="475" alt="splash screen" src="https://github.com/user-attachments/assets/c87c31f3-cc14-4712-8eb6-de4c60afc650" />
 
-TUI application developed by Ovchinnikov Resarch Group at the University of Kansas for easy, interactive transport measurements. 
- 
+Hybrid TUI/Web application, written in python developed by Ovchinnikov Resarch Group at the University of Kansas for easy, interactive transport measurements. Peppermint integrates Microsoft's [QCoDeS](https://github.com/microsoft/qcodes) driver repository into an interactive interface driven by the [Textual](https://textual.textualize.io/) and [Bokeh](https://bokeh.org/) libraries.
+
+Peppermint exposes two primary duties: monitoring and measuring. Instruments which must be closely watched for long durations (temperature controllers) may be configured to log data indefinitely (and in the future, important system events may be sent as notifications to team members). On the other hand, measurements may be configured as a sequence of primitive actions, such as setting a parameter, starting a sweep, or simply waiting for a duration.
+
 ## Installation 
 
 Clone this repository and install dependencies with [poetry](https://python-poetry.org/). Then start the application using `poetry run Peppermint.py` (or equivalent commands, depending on your installation method). `poetry lock` and `poetry install` should be used to initialize your virtual environment and ensure that all packages are downloaded, once the repository is cloned.
